@@ -16,18 +16,18 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-
-
 from rest_framework.routers import DefaultRouter
-from library import views 
-from library.api import LibraryViewSet
+
+from library.api import LibraryViewSet, BookViewSet, CategoryViewSet, ReaderViewSet, LoanViewSet
 
 router = DefaultRouter()
-router.register("library", LibraryViewSet, basename = "students")
-
+router.register("libraries", LibraryViewSet)
+router.register("books", BookViewSet)
+router.register("categories", CategoryViewSet)
+router.register("readers", ReaderViewSet)
+router.register("loans", LoanViewSet)
 
 urlpatterns = [
-    path('', views.ShowLibraryView.as_view()),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-]   
+]
