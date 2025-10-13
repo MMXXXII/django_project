@@ -1,0 +1,36 @@
+"""
+URL configuration for app project.
+
+The `urlpatterns` list routes URLs to views. For more information please see:
+    https://docs.djangoproject.com/en/5.2/topics/http/urls/
+Examples:
+Function views
+    1. Add an import:  from my_app import views
+    2. Add a URL to urlpatterns:  path('', views.home, name='home')
+Class-based views
+    1. Add an import:  from other_app.views import Home
+    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+Including another URLconf
+    1. Import the include() function: from django.urls import include, path
+    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+"""
+from django.contrib import admin
+from django.urls import path, include
+
+from rest_framework.routers import DefaultRouter
+from library.api import LibraryViewSet, BookViewSet, GenreViewSet, MemberViewSet, LoanViewSet
+
+from library import views
+
+router = DefaultRouter()
+router.register("library", LibraryViewSet, basename="library")
+router.register("book", BookViewSet, basename="book")
+router.register("genre", GenreViewSet, basename="genre")
+router.register("member", MemberViewSet, basename="member")
+router.register("loan", LoanViewSet, basename="loan")
+
+urlpatterns = [
+    path('', views.ShowLibraryView.as_view()),
+    path('admin/', admin.site.urls),
+    path('api/', include(router.urls)),
+]
