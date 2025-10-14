@@ -1,4 +1,4 @@
-from django.shortcuts import render 
+
 from django.views.generic import TemplateView
 from typing import Any
 from model_bakery import baker

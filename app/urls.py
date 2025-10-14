@@ -23,11 +23,11 @@ from library.api import LibraryViewSet, BookViewSet, GenreViewSet, MemberViewSet
 from library import views
 
 router = DefaultRouter()
-router.register("library", LibraryViewSet, basename="library")
-router.register("book", BookViewSet, basename="book")
-router.register("genre", GenreViewSet, basename="genre")
-router.register("member", MemberViewSet, basename="member")
-router.register("loan", LoanViewSet, basename="loan")
+router.register("libraries", LibraryViewSet, basename="library")
+router.register("books", BookViewSet, basename="book")
+router.register("genres", GenreViewSet, basename="genre")
+router.register("members", MemberViewSet, basename="member")
+router.register("loans", LoanViewSet, basename="loan")
 
 urlpatterns = [
     path('', views.ShowLibraryView.as_view()),
