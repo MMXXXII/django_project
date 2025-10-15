@@ -20,7 +20,7 @@ class LibraryViewSet(
 ):
     queryset = Library.objects.all()
     serializer_class = LibrarySerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
 
 class GenreViewSet(
@@ -33,7 +33,7 @@ class GenreViewSet(
 ):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
 
 class BookViewSet(
@@ -76,7 +76,7 @@ class MemberViewSet(
 ):
     queryset = Member.objects.all()
     serializer_class = MemberSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
 
 class LoanViewSet(
@@ -89,4 +89,4 @@ class LoanViewSet(
 ):
     queryset = Loan.objects.all()
     serializer_class = LoanSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
