@@ -15,10 +15,15 @@ class GenreSerializer(serializers.ModelSerializer):
 class BookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
-        fields = '__all__'
+        fields = ['id', 'title', 'genre', 'library', 'cover', 'user']
+        read_only_fields = ['user']  # не позволяем явно передавать user в запросе
 
-    library = serializers.PrimaryKeyRelatedField(queryset=Library.objects.all())
-    genre = serializers.PrimaryKeyRelatedField(queryset=Genre.objects.all())
+    def create(self, validated_data):
+        # добавляем юзера из контекста
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['user'] = request.user
+        return super().create(validated_data)
 
 
         

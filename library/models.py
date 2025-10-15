@@ -31,7 +31,8 @@ class Book(models.Model):
     
     # Новое поле для фото книги
     cover = models.ImageField("Обложка", upload_to="books", null=True, blank=True)
-
+    user = models.ForeignKey("auth.User", verbose_name="Пользователь", on_delete=models.CASCADE, null=True)
+    
     class Meta:
         verbose_name = "Книга"
         verbose_name_plural = "Книги"

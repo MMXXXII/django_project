@@ -7,6 +7,9 @@ from library.serializers import LibrarySerializer, BookSerializer, GenreSerializ
 
 from library.models import Library, Book, Genre, Loan, Member
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import filters
+
 class LibraryViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -43,7 +46,24 @@ class BookViewSet(
 ):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]  # Только авторизованные пользователи
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['user__username']  # чтобы админ мог искать по имени пользователя
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+
+        # Если суперюзер — видит всех
+        if user.is_superuser:
+            # Можно добавить фильтрацию по user через ?user_id= или ?username=
+            user_id = self.request.query_params.get('user_id')
+            if user_id:
+                qs = qs.filter(user_id=user_id)
+            return qs
+
+        # Обычный пользователь видит только свои книги
+        return qs.filter(user=user)
 
 
 class MemberViewSet(

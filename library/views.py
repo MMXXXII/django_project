@@ -15,3 +15,4 @@ class ShowLibraryView(TemplateView):
 
         return context
 
+

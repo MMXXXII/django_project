@@ -35,6 +35,7 @@ urlpatterns = [
     path('', views.ShowLibraryView.as_view()),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    
 ]
 
 if settings.DEBUG:
