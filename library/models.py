@@ -3,7 +3,7 @@ from django.db import models
 # Create your models here.
 class Genre(models.Model):
     name = models.TextField("Жанр")
-
+    
     class Meta:
         verbose_name = "Жанр"
         verbose_name_plural = "Жанры"
@@ -28,6 +28,9 @@ class Book(models.Model):
     title = models.TextField("Название книги")
     genre = models.ForeignKey(Genre, on_delete=models.CASCADE, verbose_name="Жанр")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
+    
+    # Новое поле для фото книги
+    cover = models.ImageField("Обложка", upload_to="books", null=True, blank=True)
 
     class Meta:
         verbose_name = "Книга"
