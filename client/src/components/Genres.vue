@@ -1,6 +1,32 @@
 <template>
-  <h2>Жанры <span style="font-size: 0.9em; color: #6c757d;">count ({{ genreStats ? genreStats.count : 0 }}), avg ({{ genreStats ? genreStats.avg : 0 }}), max ({{ genreStats ? genreStats.max : 0 }}), min ({{ genreStats ? genreStats.min : 0 }})</span></h2>
+  <h2>Жанры 
+    <span style="font-size: 0.9em; color: #6c757d;">
+      count ({{ genreStats ? genreStats.count : 0 }}), 
+      avg ({{ genreStats ? genreStats.avg : 0 }}), 
+      max ({{ genreStats ? genreStats.max : 0 }}), 
+      min ({{ genreStats ? genreStats.min : 0 }})
+    </span>
+  </h2>
 
+  <!-- Фильтрация -->
+  <div class="mb-3">
+    <!-- Поле для поиска по имени жанра -->
+    <input 
+      v-model="searchQuery" 
+      type="text" 
+      class="form-control" 
+      placeholder="Поиск по жанрам" 
+      @input="filterGenres"
+    />
+  </div>
+
+  <!-- Фильтр по алфавиту -->
+  <div class="mb-3">
+    <select v-model="sortOrder" @change="sortGenres" class="form-select">
+      <option value="asc">От A до Я</option>
+      <option value="desc">От Я до A</option>
+    </select>
+  </div>
 
   <!-- Форма добавления -->
   <form class="mb-3" @submit.prevent="onAddGenre">
@@ -16,7 +42,7 @@
 
   <!-- Список -->
   <ul class="list-group">
-    <li v-for="g in genres" :key="g.id" class="list-group-item d-flex justify-content-between align-items-center">
+    <li v-for="g in filteredGenres" :key="g.id" class="list-group-item d-flex justify-content-between align-items-center">
       <div>{{ g.name }}</div>
       <div>
         <button class="btn btn-sm btn-success me-2" @click="onEditClick(g)" data-bs-toggle="modal" data-bs-target="#editGenreModal">
@@ -48,24 +74,55 @@
 </template>
 
 <script setup>
-import { ref, onBeforeMount, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { onMounted } from 'vue'
 
-const genres = ref([])
+const genres = ref([]) // Храним все жанры
+const filteredGenres = ref([]) // Храним фильтрованные жанры
 const genreStats = ref(null)
 const genreToAdd = ref({ name: '' })
 const genreToEdit = ref({ id: null, name: '' })
-const isLoading = ref(true)  // Флаг для отображения загрузки
+const searchQuery = ref("") // Состояние для поиска по имени жанра
+const sortOrder = ref("asc") // Состояние для сортировки (по умолчанию от A до Я)
 
 async function fetchGenres() {
   try {
     const res = await axios.get('/genres/')
     genres.value = res.data
+    filteredGenres.value = genres.value
   } catch (error) {
     console.error('Ошибка при получении жанров:', error)
-  } finally {
-    isLoading.value = false
+  }
+}
+
+function filterGenres() {
+  // Фильтруем жанры по имени
+  filteredGenres.value = genres.value.filter(genre => 
+    genre.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  )
+  sortGenres() // После фильтрации, сортируем жанры
+}
+
+function sortGenres() {
+  // Сортируем жанры по имени (по алфавиту)
+  filteredGenres.value.sort((a, b) => {
+    const nameA = a.name.toLowerCase()
+    const nameB = b.name.toLowerCase()
+
+    if (sortOrder.value === "asc") {
+      return nameA.localeCompare(nameB)
+    } else {
+      return nameB.localeCompare(nameA)
+    }
+  })
+}
+
+async function fetchGenresStats() {
+  try {
+    const response = await axios.get('/genres/stats') // Эндпоинт для статистики
+    genreStats.value = response.data // Сохраняем статистику жанров в переменной genreStats
+  } catch (error) {
+    console.error('Ошибка при получении статистики по жанрам:', error)
   }
 }
 
@@ -91,21 +148,11 @@ async function onUpdateGenre() {
   await fetchGenresStats() // Обновляем статистику по жанрам
 }
 
-async function fetchGenresStats() {
-  try {
-    const response = await axios.get('/genres/stats') // Эндпоинт для статистики
-    genreStats.value = response.data // Сохраняем статистику жанров в переменной genreStats
-  } catch (error) {
-    console.error('Ошибка при получении статистики по жанрам:', error)
-  }
-}
-
 onMounted(async () => {
-  // Делаем все запросы сразу, чтобы избежать многократных запросов
   try {
     await Promise.all([fetchGenres(), fetchGenresStats()])
   } catch (error) {
     console.error('Ошибка при загрузке данных:', error)
   }
-});
+})
 </script>

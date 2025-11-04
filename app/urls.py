@@ -21,6 +21,8 @@ from django.conf.urls.static import static
 
 from rest_framework.routers import DefaultRouter
 from library.api import LibraryViewSet, BookViewSet, GenreViewSet, MemberViewSet, LoanViewSet
+from library.views import UserProfileViewSet
+
 
 from library import views
 
@@ -30,12 +32,14 @@ router.register("books", BookViewSet, basename="book")
 router.register("genres", GenreViewSet, basename="genre")
 router.register("members", MemberViewSet, basename="member")
 router.register("loans", LoanViewSet, basename="loan")
+router.register("userprofile", UserProfileViewSet, basename="userprofile")
 
 urlpatterns = [
     path('', views.ShowLibraryView.as_view()),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-    
+    path('api/', include('rest_framework.urls'))
+
 ]
 
 if settings.DEBUG:

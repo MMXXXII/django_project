@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 # Create your models here.
 class Genre(models.Model):
@@ -64,3 +65,10 @@ class Loan(models.Model):
 
     def __str__(self) -> str:
         return f"{self.book} → {self.member}"
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    opt_key = models.CharField(max_length=255)  # Здесь хранится секретный ключ для TOTP (OTP)
+    
+    def __str__(self):
+        return f'{self.user.username} Profile'

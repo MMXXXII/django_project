@@ -58,7 +58,7 @@ class GenreViewSet(
     @action(detail=False, methods=["GET"], url_path="stats")
     def get_stats(self, request, *args, **kwargs):
         # Агрегируем статистику по жанрам, считая количество книг в каждом жанре
-        stats = Library.objects.aggregate(
+        stats = Genre.objects.aggregate(
             count=Count("id"),
             avg=Avg("id"),
             max=Max("id"),

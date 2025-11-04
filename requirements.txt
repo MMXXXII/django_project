@@ -3,3 +3,4 @@ djangorestframework==3.16.1
 pytest-django==4.11.1
 model-bakery==1.20.5
 Faker==37.11.0
+pyotp==2.9.0
