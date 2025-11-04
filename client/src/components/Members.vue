@@ -1,5 +1,6 @@
 <template>
-  <h2>Читатели</h2>
+  <h2>Читатели <span style="font-size: 0.9em; color: #6c757d;">count ({{ memberStats ? memberStats.count : 0 }}), avg ({{ memberStats ? memberStats.avg : 0 }}), max ({{ memberStats ? memberStats.max : 0 }}), min ({{ memberStats ? memberStats.min : 0 }})</span></h2>
+
 
   <!-- Форма добавления -->
   <form class="mb-3" @submit.prevent="onAddMember">
@@ -90,19 +91,21 @@
 </template>
 
 <script setup>
-import { ref, onBeforeMount, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
-import { onMounted } from 'vue'
 
-
+// Состояния и переменные
 const members = ref([])
 const libraries = ref([])
+const memberStats = ref(null) // Статистика
 const memberToAdd = ref({ first_name: '', library: null })
 const memberToEdit = ref({ id: null, first_name: '', library: null })
 const isLoading = ref(true)  // Флаг для отображения загрузки
 
+// Сопоставление библиотек по ID
 const librariesById = computed(() => Object.fromEntries(libraries.value.map(l => [l.id, l])))
 
+// Функции для получения данных
 async function fetchMembers() {
   try {
     const res = await axios.get('/members/')
@@ -110,7 +113,7 @@ async function fetchMembers() {
   } catch (error) {
     console.error('Ошибка при получении читателей:', error)
   } finally {
-    isLoading.value = false // После загрузки данных, меняем флаг
+    isLoading.value = false
   }
 }
 
@@ -123,30 +126,43 @@ async function fetchLibraries() {
   }
 }
 
+// Получение статистики по читателям
+async function fetchMemberStats() {
+  try {
+    const response = await axios.get('/members/stats') // Эндпоинт для статистики
+    memberStats.value = response.data // Сохраняем количество читателей в переменной
+  } catch (error) {
+    console.error('Ошибка при получении статистики читателей:', error)
+  }
+}
+
+// Функция для добавления читателя
 async function onAddMember() {
   await axios.post('/members/', { ...memberToAdd.value })
   memberToAdd.value = { first_name: '', library: null }
-  await fetchMembers() // Обновляем читателей после добавления
+  await fetchMembers() // Обновляем список после добавления
 }
 
+// Функция для удаления читателя
 async function onRemove(m) {
   if (!confirm(`Удалить читателя "${m.first_name}"?`)) return
   await axios.delete(`/members/${m.id}/`)
   await fetchMembers() // Обновляем список после удаления
 }
 
+// Функция для редактирования читателя
 function onEditClick(m) {
   memberToEdit.value = { ...m }
 }
 
+// Функция для обновления данных читателя
 async function onUpdateMember() {
   await axios.put(`/members/${memberToEdit.value.id}/`, { ...memberToEdit.value })
   await fetchMembers() // Обновляем читателей после редактирования
 }
 
+// Монтирование компонента
 onMounted(async () => {
-  await Promise.all([fetchMembers(), fetchLibraries()])
+  await Promise.all([fetchMembers(), fetchLibraries(), fetchMemberStats()])
 })
 </script>
-
-

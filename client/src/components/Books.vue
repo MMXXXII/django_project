@@ -1,5 +1,6 @@
 <template>
-  <h2>Книги</h2>
+  <h2>Книги <span style="font-size: 0.9em; color: #6c757d;">count ({{ bookStats ? bookStats.count : 0 }}), avg ({{ bookStats ? bookStats.avg : 0 }}), max ({{ bookStats ? bookStats.max : 0 }}), min ({{ bookStats ? bookStats.min : 0 }})</span></h2>
+
 
   <!-- Форма добавления -->
   <form @submit.prevent="onAddBook" class="mb-3">
@@ -29,63 +30,30 @@
   <!-- Список книг -->
   <ul class="list-group">
     <li v-for="b in books" :key="b.id" class="list-group-item d-flex justify-content-between align-items-center">
-  <div>
-    <strong>{{ b.title }}</strong><br>
-    <small class="text-muted">{{ genresById[b.genre]?.name }} — {{ librariesById[b.library]?.name }}</small>
-  </div>
-  <div class="d-flex align-items-center">
-    <img 
-      v-if="b.cover" 
-      :src="b.cover" 
-      alt="Обложка" 
-      class="book-cover me-3" 
-      @click="openCoverModal(b.cover)" 
-      style="max-width: 80px; cursor: pointer;"
-    />
-    <div>
-      <button class="btn btn-sm btn-success me-2" @click="onEditClick(b)" data-bs-toggle="modal" data-bs-target="#editBookModal">
-        <i class="bi bi-pen-fill"></i>
-      </button>
-      <button class="btn btn-sm btn-danger" @click="onRemove(b)">
-        <i class="bi bi-x"></i>
-      </button>
-    </div>
-  </div>
-</li>
-
-  </ul>
-
-  <!-- Модал редактирования -->
-  <div class="modal fade" id="editBookModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Редактировать книгу</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input v-model="bookToEdit.title" class="form-control mb-2" />
-          <select v-model="bookToEdit.genre" class="form-select mb-2">
-            <option v-for="g in genres" :value="g.id" :key="g.id">{{ g.name }}</option>
-          </select>
-          <select v-model="bookToEdit.library" class="form-select mb-2">
-            <option v-for="l in libraries" :value="l.id" :key="l.id">{{ l.name }}</option>
-          </select>
-          <input type="file" ref="bookEditCoverRef" @change="onEditCoverChange" class="form-control mt-2" />
-          <img v-if="bookToEdit.cover" :src="bookToEdit.cover" alt="Обложка" class="mt-2" style="max-width:100px" />
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-          <button class="btn btn-primary" @click="onUpdateBook" data-bs-dismiss="modal">Сохранить</button>
+      <div>
+        <strong>{{ b.title }}</strong><br>
+        <small class="text-muted">{{ genresById[b.genre]?.name }} — {{ librariesById[b.library]?.name }}</small>
+      </div>
+      <div class="d-flex align-items-center">
+        <img 
+          v-if="b.cover" 
+          :src="b.cover" 
+          alt="Обложка" 
+          class="book-cover me-3" 
+          @click="openCoverModal(b.cover)" 
+          style="max-width: 80px; cursor: pointer;"
+        />
+        <div>
+          <button class="btn btn-sm btn-success me-2" @click="onEditClick(b)" data-bs-toggle="modal" data-bs-target="#editBookModal">
+            <i class="bi bi-pen-fill"></i>
+          </button>
+          <button class="btn btn-sm btn-danger" @click="onRemove(b)">
+            <i class="bi bi-x"></i>
+          </button>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- Модальное окно для просмотра обложки -->
-  <div v-if="coverModal" class="cover-modal" @click="coverModal = null">
-    <img :src="coverModal" alt="Обложка" class="cover-modal-img" />
-  </div>
+    </li>
+  </ul>
 </template>
 
 <script setup>
@@ -95,14 +63,13 @@ import axios from 'axios'
 const books = ref([])
 const genres = ref([])
 const libraries = ref([])
+const bookStats = ref(null)
 
 const bookToAdd = ref({ title: '', genre: null, library: null })
 const bookToEdit = ref({ id: null, title: '', genre: null, library: null })
 
 const bookCoverRef = ref(null)
 const bookEditCoverRef = ref(null)
-
-const coverModal = ref(null)
 
 const genresById = computed(() => Object.fromEntries(genres.value.map(g => [g.id, g])))
 const librariesById = computed(() => Object.fromEntries(libraries.value.map(l => [l.id, l])))
@@ -111,14 +78,18 @@ async function fetchBooks() { books.value = (await axios.get('/books/')).data }
 async function fetchGenres() { genres.value = (await axios.get('/genres/')).data }
 async function fetchLibraries() { libraries.value = (await axios.get('/libraries/')).data }
 
+async function fetchBookStats() {
+  try {
+    const response = await axios.get('/books/stats')
+    bookStats.value = response.data
+  } catch (error) {
+    console.error('Ошибка при получении статистики по книгам:', error)
+  }
+}
+
 function onCoverChange(event) {
   const file = event.target.files[0]
   if (file) bookToAdd.value.cover = file
-}
-
-function onEditCoverChange(event) {
-  const file = event.target.files[0]
-  if (file) bookToEdit.value.cover = file
 }
 
 async function onAddBook() {
@@ -161,9 +132,10 @@ function openCoverModal(coverUrl) {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchBooks(), fetchGenres(), fetchLibraries()])
+  await Promise.all([fetchBooks(), fetchGenres(), fetchLibraries(), fetchBookStats()])
 })
 </script>
+
 
 <style scoped>
 .cover-modal {

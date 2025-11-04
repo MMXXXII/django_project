@@ -1,5 +1,6 @@
 <template>
-  <h2>Жанры</h2>
+  <h2>Жанры <span style="font-size: 0.9em; color: #6c757d;">count ({{ genreStats ? genreStats.count : 0 }}), avg ({{ genreStats ? genreStats.avg : 0 }}), max ({{ genreStats ? genreStats.max : 0 }}), min ({{ genreStats ? genreStats.min : 0 }})</span></h2>
+
 
   <!-- Форма добавления -->
   <form class="mb-3" @submit.prevent="onAddGenre">
@@ -52,6 +53,7 @@ import axios from 'axios'
 import { onMounted } from 'vue'
 
 const genres = ref([])
+const genreStats = ref(null)
 const genreToAdd = ref({ name: '' })
 const genreToEdit = ref({ id: null, name: '' })
 const isLoading = ref(true)  // Флаг для отображения загрузки
@@ -85,13 +87,23 @@ function onEditClick(g) {
 
 async function onUpdateGenre() {
   await axios.put(`/genres/${genreToEdit.value.id}/`, { ...genreToEdit.value })
-  await fetchGenres() // Обновляем жанры после редактирования
+  await fetchGenres() // Обновляем список жанров после редактирования
+  await fetchGenresStats() // Обновляем статистику по жанрам
+}
+
+async function fetchGenresStats() {
+  try {
+    const response = await axios.get('/genres/stats') // Эндпоинт для статистики
+    genreStats.value = response.data // Сохраняем статистику жанров в переменной genreStats
+  } catch (error) {
+    console.error('Ошибка при получении статистики по жанрам:', error)
+  }
 }
 
 onMounted(async () => {
   // Делаем все запросы сразу, чтобы избежать многократных запросов
   try {
-    await Promise.all([fetchGenres()])
+    await Promise.all([fetchGenres(), fetchGenresStats()])
   } catch (error) {
     console.error('Ошибка при загрузке данных:', error)
   }

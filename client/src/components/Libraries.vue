@@ -1,5 +1,6 @@
 <template>
-  <h2>Библиотеки</h2>
+  <h2>Библиотеки <span style="font-size: 0.9em; color: #6c757d;">count ({{ libraryStats ? libraryStats.count : 0 }}), avg ({{ libraryStats ? libraryStats.avg : 0 }}), max ({{ libraryStats ? libraryStats.max : 0 }}), min ({{ libraryStats ? libraryStats.min : 0 }})</span></h2>
+
 
   <!-- Форма добавления -->
   <form class="mb-3" @submit.prevent="onAddLibrary">
@@ -26,7 +27,7 @@
     </div>
   </form>
 
-  <!-- Список -->
+  <!-- Список библиотек -->
   <ul class="list-group">
     <li
       v-for="l in libraries"
@@ -89,13 +90,11 @@
 </template>
 
 <script setup>
-import { ref, onBeforeMount, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { onMounted } from 'vue'
-
-
 
 const libraries = ref([])
+const libraryStats = ref(null) // Статистика
 const libraryToAdd = ref({ name: '', address: '' })
 const libraryToEdit = ref({ id: null, name: '', address: '' })
 const isLoading = ref(true)
@@ -111,22 +110,36 @@ async function fetchLibraries() {
   }
 }
 
+// Получение статистики по библиотекам
+async function fetchLibraryStats() {
+  try {
+    const response = await axios.get('/libraries/stats') // Эндпоинт для статистики
+    libraryStats.value = response.data // Сохраняем количество библиотек в переменной
+  } catch (error) {
+    console.error('Ошибка при получении статистики библиотек:', error)
+  }
+}
+
+// Функция для добавления библиотеки
 async function onAddLibrary() {
   await axios.post('/libraries/', { ...libraryToAdd.value })
   libraryToAdd.value = { name: '', address: '' }
-  await fetchLibraries() // Обновляем библиотеки после добавления
+  await fetchLibraries() // Обновляем список библиотек после добавления
 }
 
+// Функция для удаления библиотеки
 async function onRemove(l) {
   if (!confirm(`Удалить библиотеку "${l.name}"?`)) return
   await axios.delete(`/libraries/${l.id}/`)
   await fetchLibraries() // Обновляем список после удаления
 }
 
+// Функция для редактирования библиотеки
 function onEditClick(l) {
   libraryToEdit.value = { ...l }
 }
 
+// Функция для обновления данных библиотеки
 async function onUpdateLibrary() {
   await axios.put(`/libraries/${libraryToEdit.value.id}/`, { ...libraryToEdit.value })
   await fetchLibraries() // Обновляем библиотеки после редактирования
@@ -134,9 +147,9 @@ async function onUpdateLibrary() {
 
 onMounted(async () => {
   try {
-    await Promise.all([fetchLibraries()])
+    await Promise.all([fetchLibraries(), fetchLibraryStats()])
   } catch (error) {
     console.error('Ошибка при загрузке данных:', error)
   }
-});
+})
 </script>

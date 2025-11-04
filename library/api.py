@@ -1,14 +1,22 @@
 from library.models import Library, Book, Genre, Loan, Member
-
+from rest_framework import serializers
 from rest_framework.viewsets import GenericViewSet
 from rest_framework import mixins
-from rest_framework.permissions import AllowAny
-from library.serializers import LibrarySerializer, BookSerializer, GenreSerializer, MemberSerializer, LoanSerializer
-
-from library.models import Library, Book, Genre, Loan, Member
-
+from django.db.models import Count
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from library.serializers import LibrarySerializer, BookSerializer, GenreSerializer, MemberSerializer, LoanSerializer
 from rest_framework import filters
+from django.db.models import Count, Avg, Max, Min
+
+
+
+class StatsSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    avg = serializers.FloatField()
+    max = serializers.IntegerField()
+    min = serializers.IntegerField()
 
 class LibraryViewSet(
     mixins.ListModelMixin,
@@ -21,6 +29,18 @@ class LibraryViewSet(
     queryset = Library.objects.all()
     serializer_class = LibrarySerializer
     permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=["GET"], url_path="stats")
+    def get_stats(self, request, *args, **kwargs):
+        stats = Library.objects.aggregate(
+            count=Count("id"),
+            avg=Avg("id"),
+            max=Max("id"),
+            min=Min("id")
+        )
+        serializer = StatsSerializer(instance=stats)
+        return Response(serializer.data)
+    
 
 
 class GenreViewSet(
@@ -35,6 +55,20 @@ class GenreViewSet(
     serializer_class = GenreSerializer
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=["GET"], url_path="stats")
+    def get_stats(self, request, *args, **kwargs):
+        # Агрегируем статистику по жанрам, считая количество книг в каждом жанре
+        stats = Library.objects.aggregate(
+            count=Count("id"),
+            avg=Avg("id"),
+            max=Max("id"),
+            min=Min("id")
+        )
+        
+        serializer = StatsSerializer(instance=stats)
+        return Response(serializer.data)
+
+
 
 class BookViewSet(
     mixins.ListModelMixin,
@@ -46,25 +80,20 @@ class BookViewSet(
 ):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
-    permission_classes = [IsAuthenticated]  # Только авторизованные пользователи
+    permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter]
-    search_fields = ['user__username']  # чтобы админ мог искать по имени пользователя
+    search_fields = ['user__username']
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-
-        # Если суперюзер — видит всех
-        if user.is_superuser:
-            # Можно добавить фильтрацию по user через ?user_id= или ?username=
-            user_id = self.request.query_params.get('user_id')
-            if user_id:
-                qs = qs.filter(user_id=user_id)
-            return qs
-
-        # Обычный пользователь видит только свои книги
-        return qs.filter(user=user)
-
+    @action(detail=False, methods=["GET"], url_path="stats")
+    def get_stats(self, request, *args, **kwargs):
+        stats = Book.objects.aggregate(
+            count=Count("id"),
+            avg=Avg("id"),
+            max=Max("id"),
+            min=Min("id")
+        )
+        serializer = StatsSerializer(instance=stats)
+        return Response(serializer.data)
 
 class MemberViewSet(
     mixins.ListModelMixin,
@@ -78,6 +107,17 @@ class MemberViewSet(
     serializer_class = MemberSerializer
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=["GET"], url_path="stats")
+    def get_stats(self, request, *args, **kwargs):
+        stats = Member.objects.aggregate(
+            count=Count("id"),
+            avg=Avg("id"),
+            max=Max("id"),
+            min=Min("id")
+        )
+        serializer = StatsSerializer(instance=stats)
+        return Response(serializer.data)
+
 
 class LoanViewSet(
     mixins.ListModelMixin,
@@ -90,3 +130,14 @@ class LoanViewSet(
     queryset = Loan.objects.all()
     serializer_class = LoanSerializer
     permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=["GET"], url_path="stats")
+    def get_stats(self, request, *args, **kwargs):
+        stats = Loan.objects.aggregate(
+            count=Count("id"),
+            avg=Avg("id"),
+            max=Max("id"),
+            min=Min("id")
+        )
+        serializer = StatsSerializer(instance=stats)
+        return Response(serializer.data)
