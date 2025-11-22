@@ -126,21 +126,6 @@ function onEditClick(l) {
   libraryToEdit.modalInstance.show()
 }
 
-async function onUpdateLibrary() {
-  if (!libraryToEdit.id) return
-  await axios.put(`/libraries/${libraryToEdit.id}/`, { name: libraryToEdit.name })
-  await fetchLibraries()
-  await fetchLibraryStats()
-  hideEditModal()
-}
-
-function hideEditModal() {
-  if (libraryToEdit.modalInstance) libraryToEdit.modalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  libraryToEdit.id = null
-  libraryToEdit.name = ''
-}
-
 function onRemoveClick(l) {
   libraryToDelete.id = l.id
   libraryToDelete.name = l.name

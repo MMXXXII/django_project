@@ -167,14 +167,6 @@ function onEditClick(l) {
   loanToEdit.modalInstance.show()
 }
 
-async function onUpdateLoan() {
-  if (!loanToEdit.id) return
-  await axios.put(`/loans/${loanToEdit.id}/`, { book: loanToEdit.book, member: loanToEdit.member, loan_date: loanToEdit.loan_date })
-  await fetchLoans()
-  await fetchLoanStats()
-  hideEditModal()
-}
-
 function hideEditModal() {
   if (loanToEdit.modalInstance) loanToEdit.modalInstance.hide()
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
@@ -192,23 +184,6 @@ function onRemoveClick(l) {
   const modalEl = document.getElementById('deleteLoanModal')
   deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   deleteModalInstance.show()
-}
-
-async function confirmDelete() {
-  if (!loanToDelete.id) return
-  await axios.delete(`/loans/${loanToDelete.id}/`)
-  await fetchLoans()
-  await fetchLoanStats()
-  hideDeleteModal()
-}
-
-function hideDeleteModal() {
-  if (deleteModalInstance) deleteModalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  loanToDelete.id = null
-  loanToDelete.book = null
-  loanToDelete.member = null
-  loanToDelete.loan_date = ''
 }
 
 // --- Экспорт данных ---

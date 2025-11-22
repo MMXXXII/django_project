@@ -16,8 +16,6 @@ from .serializers import (
 
 
 class BaseExportMixin:
-    """Миксин для экспорта Excel и Word"""
-
     def export_queryset(self, queryset, columns, filename_base):
         file_type = self.request.query_params.get('type', 'excel')
 
