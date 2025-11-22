@@ -1,12 +1,21 @@
 <template>
   <h2>Жанры</h2>
 
-  <!-- Статистика -->
-  <div class="stats-line mb-3">
-    <div class="stat">Количество: {{ genreStats?.count || 0 }}</div>
-    <div class="stat">Среднее: {{ genreStats?.avg || 0 }}</div>
-    <div class="stat">Максимум: {{ genreStats?.max || 0 }}</div>
-    <div class="stat">Минимум: {{ genreStats?.min || 0 }}</div>
+  <!-- Статистика + кнопки -->
+  <div class="stats-line">
+    <!-- Статистика слева -->
+    <div class="stats-left">
+      <div class="stat">Количество: {{ genreStats?.count || 0 }}</div>
+      <div class="stat">Среднее: {{ genreStats?.avg || 0 }}</div>
+      <div class="stat">Максимум: {{ genreStats?.max || 0 }}</div>
+      <div class="stat">Минимум: {{ genreStats?.min || 0 }}</div>
+    </div>
+
+    <!-- Кнопки справа -->
+    <div class="stats-right">
+      <button class="btn btn-success btn-sm me-2" @click="exportGenresExcel">Excel</button>
+      <button class="btn btn-primary btn-sm" @click="exportGenresWord">Word</button>
+    </div>
   </div>
 
   <!-- Поиск -->
@@ -55,7 +64,7 @@
     </li>
   </ul>
 
-  <!-- Модалка редактирования -->
+  <!-- Модалки редактирования и удаления -->
   <div class="modal fade" id="editGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -74,7 +83,6 @@
     </div>
   </div>
 
-  <!-- Модалка удаления -->
   <div class="modal fade" id="deleteGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -166,10 +174,7 @@ async function onUpdateGenre() {
 }
 
 function hideEditModal() {
-  if (genreToEdit.modalInstance) {
-    genreToEdit.modalInstance.hide()
-    genreToEdit.modalInstance = null
-  }
+  if (genreToEdit.modalInstance) genreToEdit.modalInstance.hide()
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   genreToEdit.id = null
   genreToEdit.name = ''
@@ -199,6 +204,32 @@ function hideDeleteModal() {
   genreToDelete.name = ''
 }
 
+// --- Экспорт ---
+function exportGenresExcel() {
+  exportData('excel')
+}
+function exportGenresWord() {
+  exportData('word')
+}
+function exportData(type = 'excel') {
+  axios({
+    url: `/genres/export/?type=${type}`,
+    method: 'GET',
+    responseType: 'blob'
+  }).then(res => {
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', type === 'excel' ? 'genres.xlsx' : 'genres.docx')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }).catch(err => {
+    console.error('Ошибка при скачивании:', err)
+    alert('Ошибка при скачивании файла')
+  })
+}
+
 // --- Инициализация ---
 onMounted(async () => {
   await Promise.all([fetchGenres(), fetchGenreStats()])
@@ -208,9 +239,19 @@ onMounted(async () => {
 <style scoped>
 .stats-line {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   margin-bottom: 14px;
   font-size: 0.9em;
+}
+.stats-left {
+  display: flex;
+  gap: 12px;
+}
+.stats-right {
+  display: flex;
+  gap: 6px;
 }
 .stat {
   background: #fafafa;

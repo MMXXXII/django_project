@@ -1,12 +1,21 @@
 <template>
   <h2>Книги</h2>
 
-  <!-- Статистика -->
+  <!-- Статистика + кнопки -->
   <div class="stats-line">
-    <div class="stat">Количество: {{ bookStats?.count || 0 }}</div>
-    <div class="stat">Среднее: {{ bookStats?.avg || 0 }}</div>
-    <div class="stat">Максимум: {{ bookStats?.max || 0 }}</div>
-    <div class="stat">Минимум: {{ bookStats?.min || 0 }}</div>
+    <!-- Статистика слева -->
+    <div class="stats-left">
+      <div class="stat">Количество: {{ bookStats?.count || 0 }}</div>
+      <div class="stat">Среднее: {{ bookStats?.avg || 0 }}</div>
+      <div class="stat">Максимум: {{ bookStats?.max || 0 }}</div>
+      <div class="stat">Минимум: {{ bookStats?.min || 0 }}</div>
+    </div>
+
+    <!-- Кнопки справа -->
+    <div class="stats-right">
+      <button class="btn btn-success btn-sm me-2" @click="exportBooksExcel">Excel</button>
+      <button class="btn btn-primary btn-sm" @click="exportBooksWord">Word</button>
+    </div>
   </div>
 
   <!-- Поиск -->
@@ -32,12 +41,7 @@
   <form class="mb-3" @submit.prevent="onAddBook">
     <div class="row g-2 align-items-center">
       <div class="col">
-        <input 
-          v-model="bookToAdd.title" 
-          class="form-control" 
-          placeholder="Название книги" 
-          required 
-        />
+        <input v-model="bookToAdd.title" class="form-control" placeholder="Название книги" required />
       </div>
       <div class="col">
         <select v-model="bookToAdd.genre" class="form-select" required>
@@ -66,9 +70,7 @@
     >
       <div>
         <strong>{{ b.title }}</strong>
-        <div class="text-muted small">
-          {{ b.genre_name }} / {{ b.library_name }}
-        </div>
+        <div class="text-muted small">{{ b.genre_name }} / {{ b.library_name }}</div>
       </div>
       <div>
         <button class="btn btn-sm btn-success me-2" @click="onEditClick(b)">
@@ -81,7 +83,7 @@
     </li>
   </ul>
 
-  <!-- Модалка редактирования книги -->
+  <!-- Модалки редактирования и удаления -->
   <div class="modal fade" id="editBookModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -106,7 +108,6 @@
     </div>
   </div>
 
-  <!-- Модалка удаления книги -->
   <div class="modal fade" id="deleteBookModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -148,7 +149,7 @@ let deleteModalInstance = null
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
-// --- API ---
+// --- API функции ---
 async function fetchBooks() {
   const r = await axios.get('/books/')
   books.value = r.data.map(b => ({
@@ -211,7 +212,6 @@ function onEditClick(b) {
   bookToEdit.title = b.title
   bookToEdit.genre = b.genre
   bookToEdit.library = b.library
-
   const modalEl = document.getElementById('editBookModal')
   bookToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   bookToEdit.modalInstance.show()
@@ -230,11 +230,7 @@ async function onUpdateBook() {
 }
 
 function hideEditModal() {
-  if (bookToEdit.modalInstance) {
-    bookToEdit.modalInstance.hide()
-    bookToEdit.modalInstance = null
-  }
-  // удаляем все backdrop
+  if (bookToEdit.modalInstance) bookToEdit.modalInstance.hide()
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   bookToEdit.id = null
   bookToEdit.title = ''
@@ -266,6 +262,34 @@ function hideDeleteModal() {
   bookToDelete.title = ''
 }
 
+// --- Экспорт данных ---
+function exportBooksExcel() {
+  exportData('excel')
+}
+
+function exportBooksWord() {
+  exportData('word')
+}
+
+function exportData(type = 'excel') {
+  axios({
+    url: `/books/export/?type=${type}`,
+    method: 'GET',
+    responseType: 'blob'
+  }).then((response) => {
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', type === 'excel' ? 'books.xlsx' : 'books.docx')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }).catch((err) => {
+    console.error('Ошибка при скачивании:', err)
+    alert('Ошибка при скачивании файла')
+  })
+}
+
 // --- Инициализация ---
 onMounted(async () => {
   await fetchBooks()
@@ -278,10 +302,23 @@ onMounted(async () => {
 <style scoped>
 .stats-line {
   display: flex;
+  align-items: center;
+  justify-content: space-between; /* Левая статистика, правые кнопки */
   gap: 12px;
   margin-bottom: 14px;
   font-size: 0.9em;
 }
+
+.stats-left {
+  display: flex;
+  gap: 12px;
+}
+
+.stats-right {
+  display: flex;
+  gap: 6px;
+}
+
 .stat {
   background: #fafafa;
   border: 1px solid #ddd;
