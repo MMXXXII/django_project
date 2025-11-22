@@ -1,16 +1,16 @@
 <template>
-  <h2>Жанры 
-    <span style="font-size: 0.9em; color: #6c757d;">
-      count ({{ genreStats ? genreStats.count : 0 }}), 
-      avg ({{ genreStats ? genreStats.avg : 0 }}), 
-      max ({{ genreStats ? genreStats.max : 0 }}), 
-      min ({{ genreStats ? genreStats.min : 0 }})
-    </span>
-  </h2>
+  <h2>Жанры</h2>
 
-  <!-- Фильтрация -->
+  <!-- Статистика -->
+  <div class="stats-line mb-3">
+    <div class="stat">Количество: {{ genreStats?.count || 0 }}</div>
+    <div class="stat">Среднее: {{ genreStats?.avg || 0 }}</div>
+    <div class="stat">Максимум: {{ genreStats?.max || 0 }}</div>
+    <div class="stat">Минимум: {{ genreStats?.min || 0 }}</div>
+  </div>
+
+  <!-- Поиск -->
   <div class="mb-3">
-    <!-- Поле для поиска по имени жанра -->
     <input 
       v-model="searchQuery" 
       type="text" 
@@ -20,7 +20,7 @@
     />
   </div>
 
-  <!-- Фильтр по алфавиту -->
+  <!-- Сортировка -->
   <div class="mb-3">
     <select v-model="sortOrder" @change="sortGenres" class="form-select">
       <option value="asc">От A до Я</option>
@@ -35,38 +35,59 @@
         <input v-model="genreToAdd.name" class="form-control" placeholder="Название жанра" required />
       </div>
       <div class="col-auto">
-        <button class="btn btn-primary">Добавить</button>
+        <button type="button" class="btn btn-outline-success" @click="onAddGenre">Добавить</button>
       </div>
     </div>
   </form>
 
-  <!-- Список -->
+  <!-- Список жанров -->
   <ul class="list-group">
     <li v-for="g in filteredGenres" :key="g.id" class="list-group-item d-flex justify-content-between align-items-center">
       <div>{{ g.name }}</div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(g)" data-bs-toggle="modal" data-bs-target="#editGenreModal">
+        <button class="btn btn-sm btn-success me-2" @click="onEditClick(g)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemove(g)"><i class="bi bi-x"></i></button>
+        <button class="btn btn-sm btn-danger" @click="onRemoveClick(g)">
+          <i class="bi bi-x"></i>
+        </button>
       </div>
     </li>
   </ul>
 
-  <!-- Модал для редактирования -->
+  <!-- Модалка редактирования -->
   <div class="modal fade" id="editGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Редактировать жанр</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title">Редактирование жанра</h5>
+          <button type="button" class="btn-close" @click="hideEditModal"></button>
         </div>
         <div class="modal-body">
-          <input v-model="genreToEdit.name" class="form-control" />
+          <input v-model="genreToEdit.name" class="form-control" placeholder="Название жанра" />
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-          <button class="btn btn-primary" @click="onUpdateGenre" data-bs-dismiss="modal">Сохранить</button>
+          <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
+          <button type="button" class="btn btn-success" @click="onUpdateGenre">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка удаления -->
+  <div class="modal fade" id="deleteGenreModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление жанра</h5>
+          <button type="button" class="btn-close" @click="hideDeleteModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ genreToDelete.name }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
         </div>
       </div>
     </div>
@@ -74,85 +95,128 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
+import * as bootstrap from 'bootstrap'
 
-const genres = ref([]) // Храним все жанры
-const filteredGenres = ref([]) // Храним фильтрованные жанры
+const genres = ref([])
+const filteredGenres = ref([])
 const genreStats = ref(null)
-const genreToAdd = ref({ name: '' })
-const genreToEdit = ref({ id: null, name: '' })
-const searchQuery = ref("") // Состояние для поиска по имени жанра
-const sortOrder = ref("asc") // Состояние для сортировки (по умолчанию от A до Я)
 
+const genreToAdd = reactive({ name: '' })
+const genreToEdit = reactive({ id: null, name: '', modalInstance: null })
+const genreToDelete = reactive({ id: null, name: '' })
+let deleteModalInstance = null
+
+const searchQuery = ref('')
+const sortOrder = ref('asc')
+
+// --- Получение данных ---
 async function fetchGenres() {
-  try {
-    const res = await axios.get('/genres/')
-    genres.value = res.data
-    filteredGenres.value = genres.value
-  } catch (error) {
-    console.error('Ошибка при получении жанров:', error)
-  }
+  const r = await axios.get('/genres/')
+  genres.value = r.data
+  filterGenres()
 }
 
+async function fetchGenreStats() {
+  const r = await axios.get('/genres/stats/')
+  genreStats.value = r.data
+}
+
+// --- Фильтр и сортировка ---
 function filterGenres() {
-  // Фильтруем жанры по имени
-  filteredGenres.value = genres.value.filter(genre => 
-    genre.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  filteredGenres.value = genres.value.filter(g =>
+    g.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
-  sortGenres() // После фильтрации, сортируем жанры
+  sortGenres()
 }
 
 function sortGenres() {
-  // Сортируем жанры по имени (по алфавиту)
   filteredGenres.value.sort((a, b) => {
-    const nameA = a.name.toLowerCase()
-    const nameB = b.name.toLowerCase()
-
-    if (sortOrder.value === "asc") {
-      return nameA.localeCompare(nameB)
-    } else {
-      return nameB.localeCompare(nameA)
-    }
+    const A = a.name.toLowerCase()
+    const B = b.name.toLowerCase()
+    return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
   })
 }
 
-async function fetchGenresStats() {
-  try {
-    const response = await axios.get('/genres/stats') // Эндпоинт для статистики
-    genreStats.value = response.data // Сохраняем статистику жанров в переменной genreStats
-  } catch (error) {
-    console.error('Ошибка при получении статистики по жанрам:', error)
-  }
-}
-
+// --- Добавление ---
 async function onAddGenre() {
-  await axios.post('/genres/', { ...genreToAdd.value })
-  genreToAdd.value = { name: '' }
-  await fetchGenres() // Обновляем жанры после добавления
+  if (!genreToAdd.name) return
+  await axios.post('/genres/', { ...genreToAdd })
+  genreToAdd.name = ''
+  await fetchGenres()
+  await fetchGenreStats()
 }
 
-async function onRemove(g) {
-  if (!confirm(`Удалить жанр "${g.name}"?`)) return
-  await axios.delete(`/genres/${g.id}/`)
-  await fetchGenres() // Обновляем список после удаления
-}
-
+// --- Редактирование ---
 function onEditClick(g) {
-  genreToEdit.value = { ...g }
+  genreToEdit.id = g.id
+  genreToEdit.name = g.name
+  const modalEl = document.getElementById('editGenreModal')
+  genreToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  genreToEdit.modalInstance.show()
 }
 
 async function onUpdateGenre() {
-  await axios.put(`/genres/${genreToEdit.value.id}/`, { ...genreToEdit.value })
-  await fetchGenres() // Обновляем список жанров после редактирования
-  await fetchGenresStats() // Обновляем статистику по жанрам
+  if (!genreToEdit.id) return
+  await axios.put(`/genres/${genreToEdit.id}/`, { name: genreToEdit.name })
+  await fetchGenres()
+  await fetchGenreStats()
+  hideEditModal()
 }
 
-onMounted(async () => {
-  try {
-    await Promise.all([fetchGenres(), fetchGenresStats()])
-  } catch (error) {
-    console.error('Ошибка при загрузке данных:', error)
+function hideEditModal() {
+  if (genreToEdit.modalInstance) {
+    genreToEdit.modalInstance.hide()
+    genreToEdit.modalInstance = null
   }
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  genreToEdit.id = null
+  genreToEdit.name = ''
+}
+
+// --- Удаление ---
+function onRemoveClick(g) {
+  genreToDelete.id = g.id
+  genreToDelete.name = g.name
+  const modalEl = document.getElementById('deleteGenreModal')
+  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteModalInstance.show()
+}
+
+async function confirmDelete() {
+  if (!genreToDelete.id) return
+  await axios.delete(`/genres/${genreToDelete.id}/`)
+  await fetchGenres()
+  await fetchGenreStats()
+  hideDeleteModal()
+}
+
+function hideDeleteModal() {
+  if (deleteModalInstance) deleteModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  genreToDelete.id = null
+  genreToDelete.name = ''
+}
+
+// --- Инициализация ---
+onMounted(async () => {
+  await Promise.all([fetchGenres(), fetchGenreStats()])
 })
 </script>
+
+<style scoped>
+.stats-line {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+</style>

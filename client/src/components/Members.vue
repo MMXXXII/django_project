@@ -50,7 +50,7 @@
       </div>
 
       <div class="col-auto">
-        <button type="button" class="btn btn-outline-success">Успех</button>
+        <button type="submit" class="btn btn-outline-success">Добавить</button>
       </div>
     </div>
   </form>
@@ -73,8 +73,6 @@
         <button 
           class="btn btn-sm btn-success me-2" 
           @click="onEditClick(m)"
-          data-bs-toggle="modal" 
-          data-bs-target="#editMemberModal"
         >
           <i class="bi bi-pen-fill"></i>
         </button>
@@ -83,8 +81,6 @@
         <button 
           class="btn btn-sm btn-danger" 
           @click="onRemoveClick(m)"
-          data-bs-toggle="modal"
-          data-bs-target="#deleteMemberModal"
         >
           <i class="bi bi-x"></i>
         </button>
@@ -141,21 +137,22 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 
-// Данные
+// --- Данные ---
 const members = ref([])
 const filteredMembers = ref([])
 const libraries = ref([])
 const memberStats = ref(null)
 
-// Добавление и редактирование
+// --- Формы ---
 const memberToAdd = reactive({ first_name: '', library: '' })
 const memberToEdit = reactive({ id: null, first_name: '', library: '' })
-
-// Удаление
 const memberToDelete = reactive({ id: null, first_name: '' })
+
+// --- Модалки Bootstrap ---
+let editModalInstance = null
 let deleteModalInstance = null
 
-// Поиск и сортировка
+// --- Поиск и сортировка ---
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
@@ -163,7 +160,7 @@ const librariesById = computed(() =>
   Object.fromEntries(libraries.value.map(l => [l.id, l]))
 )
 
-// Получение данных с API
+// --- API ---
 async function fetchMembers() {
   const r = await axios.get('/members/')
   members.value = r.data
@@ -180,7 +177,7 @@ async function fetchMemberStats() {
   memberStats.value = r.data
 }
 
-// Фильтр и сортировка
+// --- Фильтр и сортировка ---
 function filterMembers() {
   filteredMembers.value = members.value.filter(m =>
     m.first_name.toLowerCase().includes(searchQuery.value.toLowerCase())
@@ -196,50 +193,42 @@ function sortMembers() {
   })
 }
 
-// Добавление
+// --- Добавление ---
 async function onAddMember() {
-  const payload = { 
-    first_name: memberToAdd.first_name, 
-    library: Number(memberToAdd.library) 
-  }
-  await axios.post('/members/', payload)
+  if (!memberToAdd.first_name || !memberToAdd.library) return
+  await axios.post('/members/', { 
+    first_name: memberToAdd.first_name,
+    library: Number(memberToAdd.library)
+  })
   memberToAdd.first_name = ''
   memberToAdd.library = ''
   await fetchMembers()
   await fetchMemberStats()
 }
 
-// Редактирование
+// --- Редактирование ---
 function onEditClick(m) {
   memberToEdit.id = m.id
   memberToEdit.first_name = m.first_name
   memberToEdit.library = m.library
-
-  const modalEl = document.getElementById('editMemberModal')
-  const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  modalInstance.show()
+  editModalInstance.show()
 }
 
 async function onUpdateMember() {
-  const payload = { 
-    first_name: memberToEdit.first_name, 
-    library: Number(memberToEdit.library) 
-  }
-  await axios.put(`/members/${memberToEdit.id}/`, payload)
+  if (!memberToEdit.first_name || !memberToEdit.library) return
+  await axios.put(`/members/${memberToEdit.id}/`, {
+    first_name: memberToEdit.first_name,
+    library: Number(memberToEdit.library)
+  })
   await fetchMembers()
   await fetchMemberStats()
-  // закрываем модалку вручную
-  const modalEl = document.getElementById('editMemberModal')
-  bootstrap.Modal.getInstance(modalEl).hide()
+  editModalInstance.hide()
 }
 
-// Удаление
+// --- Удаление ---
 function onRemoveClick(m) {
   memberToDelete.id = m.id
   memberToDelete.first_name = m.first_name
-
-  const modalEl = document.getElementById('deleteMemberModal')
-  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   deleteModalInstance.show()
 }
 
@@ -253,11 +242,14 @@ async function confirmDelete() {
   memberToDelete.first_name = ''
 }
 
-// Инициализация
+// --- Инициализация ---
 onMounted(async () => {
   await fetchMembers()
   await fetchLibraries()
   await fetchMemberStats()
+
+  editModalInstance = new bootstrap.Modal(document.getElementById('editMemberModal'))
+  deleteModalInstance = new bootstrap.Modal(document.getElementById('deleteMemberModal'))
 })
 </script>
 
@@ -277,4 +269,3 @@ onMounted(async () => {
   color: #333;
 }
 </style>
-  

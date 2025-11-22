@@ -4,9 +4,12 @@ from library.models import Library, Book, Genre, Member, Loan
 from django.contrib.auth.models import User
 
 class BookSerializer(serializers.ModelSerializer):
+    genre_name = serializers.StringRelatedField(source='genre', read_only=True)
+    library_name = serializers.StringRelatedField(source='library', read_only=True)
+
     class Meta:
         model = Book
-        fields = ['id', 'title', 'genre', 'library', 'cover', 'user']
+        fields = ['id', 'title', 'genre', 'library', 'genre_name', 'library_name', 'cover', 'user']
         read_only_fields = ['user']
 
     def create(self, validated_data):

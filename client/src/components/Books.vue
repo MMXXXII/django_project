@@ -1,16 +1,16 @@
 <template>
-  <h2>Книги 
-    <span style="font-size: 0.9em; color: #6c757d;">
-      count ({{ bookStats ? bookStats.count : 0 }}), 
-      avg ({{ bookStats ? bookStats.avg : 0 }}), 
-      max ({{ bookStats ? bookStats.max : 0 }}), 
-      min ({{ bookStats ? bookStats.min : 0 }})
-    </span>
-  </h2>
+  <h2>Книги</h2>
 
-  <!-- Фильтрация -->
+  <!-- Статистика -->
+  <div class="stats-line">
+    <div class="stat">Количество: {{ bookStats?.count || 0 }}</div>
+    <div class="stat">Среднее: {{ bookStats?.avg || 0 }}</div>
+    <div class="stat">Максимум: {{ bookStats?.max || 0 }}</div>
+    <div class="stat">Минимум: {{ bookStats?.min || 0 }}</div>
+  </div>
+
+  <!-- Поиск -->
   <div class="mb-3">
-    <!-- Поле для поиска по названию книги -->
     <input 
       v-model="searchQuery" 
       type="text" 
@@ -20,7 +20,7 @@
     />
   </div>
 
-  <!-- Фильтр по алфавиту -->
+  <!-- Сортировка -->
   <div class="mb-3">
     <select v-model="sortOrder" @change="sortBooks" class="form-select">
       <option value="asc">От A до Я</option>
@@ -32,41 +32,94 @@
   <form class="mb-3" @submit.prevent="onAddBook">
     <div class="row g-2 align-items-center">
       <div class="col">
-        <input v-model="bookToAdd.title" class="form-control" placeholder="Название книги" required />
+        <input 
+          v-model="bookToAdd.title" 
+          class="form-control" 
+          placeholder="Название книги" 
+          required 
+        />
+      </div>
+      <div class="col">
+        <select v-model="bookToAdd.genre" class="form-select" required>
+          <option value="" disabled>Выберите жанр</option>
+          <option v-for="g in genres" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+      </div>
+      <div class="col">
+        <select v-model="bookToAdd.library" class="form-select" required>
+          <option value="" disabled>Выберите библиотеку</option>
+          <option v-for="l in libraries" :key="l.id" :value="l.id">{{ l.name }}</option>
+        </select>
       </div>
       <div class="col-auto">
-        <button class="btn btn-primary">Добавить</button>
+        <button type="submit" class="btn btn-outline-success">Добавить</button>
       </div>
     </div>
   </form>
 
-  <!-- Список -->
+  <!-- Список книг -->
   <ul class="list-group">
-    <li v-for="b in filteredBooks" :key="b.id" class="list-group-item d-flex justify-content-between align-items-center">
-      <div>{{ b.title }}</div>
+    <li 
+      v-for="b in filteredBooks" 
+      :key="b.id" 
+      class="list-group-item d-flex justify-content-between align-items-center"
+    >
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(b)" data-bs-toggle="modal" data-bs-target="#editBookModal">
+        <strong>{{ b.title }}</strong>
+        <div class="text-muted small">
+          {{ b.genre_name }} / {{ b.library_name }}
+        </div>
+      </div>
+      <div>
+        <button class="btn btn-sm btn-success me-2" @click="onEditClick(b)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemove(b)"><i class="bi bi-x"></i></button>
+        <button class="btn btn-sm btn-danger" @click="onRemoveClick(b)">
+          <i class="bi bi-x"></i>
+        </button>
       </div>
     </li>
   </ul>
 
-  <!-- Модал для редактирования -->
+  <!-- Модалка редактирования книги -->
   <div class="modal fade" id="editBookModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Редактировать книгу</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title">Редактирование книги</h5>
+          <button type="button" class="btn-close" @click="hideEditModal"></button>
         </div>
         <div class="modal-body">
-          <input v-model="bookToEdit.title" class="form-control" />
+          <input v-model="bookToEdit.title" class="form-control mb-2" placeholder="Название книги" />
+          <select v-model="bookToEdit.genre" class="form-select mb-2">
+            <option v-for="g in genres" :key="g.id" :value="g.id">{{ g.name }}</option>
+          </select>
+          <select v-model="bookToEdit.library" class="form-select">
+            <option v-for="l in libraries" :key="l.id" :value="l.id">{{ l.name }}</option>
+          </select>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-          <button class="btn btn-primary" @click="onUpdateBook" data-bs-dismiss="modal">Сохранить</button>
+          <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
+          <button type="button" class="btn btn-success" @click="onUpdateBook">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка удаления книги -->
+  <div class="modal fade" id="deleteBookModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление книги</h5>
+          <button type="button" class="btn-close" @click="hideDeleteModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ bookToDelete.title }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
         </div>
       </div>
     </div>
@@ -74,85 +127,166 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
+import * as bootstrap from 'bootstrap'
 
-const books = ref([]) // Храним все книги
-const filteredBooks = ref([]) // Храним фильтрованные книги
+const books = ref([])
+const filteredBooks = ref([])
 const bookStats = ref(null)
-const bookToAdd = ref({ title: '' })
-const bookToEdit = ref({ id: null, title: '' })
-const searchQuery = ref("") // Состояние для поиска по названию книги
-const sortOrder = ref("asc") // Состояние для сортировки (по умолчанию от A до Я)
+const genres = ref([])
+const libraries = ref([])
 
+// Добавление / редактирование
+const bookToAdd = reactive({ title: '', genre: null, library: null })
+const bookToEdit = reactive({ id: null, title: '', genre: null, library: null, modalInstance: null })
+
+// Удаление
+const bookToDelete = reactive({ id: null, title: '' })
+let deleteModalInstance = null
+
+const searchQuery = ref('')
+const sortOrder = ref('asc')
+
+// --- API ---
 async function fetchBooks() {
-  try {
-    const res = await axios.get('/books/')
-    books.value = res.data
-    filteredBooks.value = books.value
-  } catch (error) {
-    console.error('Ошибка при получении книг:', error)
-  }
+  const r = await axios.get('/books/')
+  books.value = r.data.map(b => ({
+    ...b,
+    genre_name: b.genre_name || b.genre,
+    library_name: b.library_name || b.library
+  }))
+  filterBooks()
 }
 
+async function fetchBookStats() {
+  const r = await axios.get('/books/stats/')
+  bookStats.value = r.data
+}
+
+async function fetchGenres() {
+  const r = await axios.get('/genres/')
+  genres.value = r.data
+}
+
+async function fetchLibraries() {
+  const r = await axios.get('/libraries/')
+  libraries.value = r.data
+}
+
+// --- Фильтр / сортировка ---
 function filterBooks() {
-  // Фильтруем книги по названию
-  filteredBooks.value = books.value.filter(book => 
-    book.title.toLowerCase().includes(searchQuery.value.toLowerCase())
+  filteredBooks.value = books.value.filter(b =>
+    b.title.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
-  sortBooks() // После фильтрации, сортируем книги
+  sortBooks()
 }
 
 function sortBooks() {
-  // Сортируем книги по названию (по алфавиту)
   filteredBooks.value.sort((a, b) => {
-    const nameA = a.title.toLowerCase()
-    const nameB = b.title.toLowerCase()
-
-    if (sortOrder.value === "asc") {
-      return nameA.localeCompare(nameB)
-    } else {
-      return nameB.localeCompare(nameA)
-    }
+    const A = a.title.toLowerCase()
+    const B = b.title.toLowerCase()
+    return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
   })
 }
 
-async function fetchBooksStats() {
-  try {
-    const response = await axios.get('/books/stats') // Эндпоинт для статистики
-    bookStats.value = response.data // Сохраняем статистику книг в переменной bookStats
-  } catch (error) {
-    console.error('Ошибка при получении статистики по книгам:', error)
-  }
-}
-
+// --- Добавление ---
 async function onAddBook() {
-  await axios.post('/books/', { ...bookToAdd.value })
-  bookToAdd.value = { title: '' }
-  await fetchBooks() // Обновляем книги после добавления
+  if (!bookToAdd.genre || !bookToAdd.library) return alert('Выберите жанр и библиотеку')
+  await axios.post('/books/', { 
+    title: bookToAdd.title,
+    genre: bookToAdd.genre,
+    library: bookToAdd.library
+  })
+  bookToAdd.title = ''
+  bookToAdd.genre = null
+  bookToAdd.library = null
+  await fetchBooks()
+  await fetchBookStats()
 }
 
-async function onRemove(b) {
-  if (!confirm(`Удалить книгу "${b.title}"?`)) return
-  await axios.delete(`/books/${b.id}/`)
-  await fetchBooks() // Обновляем список после удаления
-}
-
+// --- Редактирование ---
 function onEditClick(b) {
-  bookToEdit.value = { ...b }
+  bookToEdit.id = b.id
+  bookToEdit.title = b.title
+  bookToEdit.genre = b.genre
+  bookToEdit.library = b.library
+
+  const modalEl = document.getElementById('editBookModal')
+  bookToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  bookToEdit.modalInstance.show()
 }
 
 async function onUpdateBook() {
-  await axios.put(`/books/${bookToEdit.value.id}/`, { ...bookToEdit.value })
-  await fetchBooks() // Обновляем список книг после редактирования
-  await fetchBooksStats() // Обновляем статистику по книгам
+  if (!bookToEdit.id) return
+  await axios.put(`/books/${bookToEdit.id}/`, { 
+    title: bookToEdit.title,
+    genre: bookToEdit.genre,
+    library: bookToEdit.library
+  })
+  await fetchBooks()
+  await fetchBookStats()
+  hideEditModal()
 }
 
-onMounted(async () => {
-  try {
-    await Promise.all([fetchBooks(), fetchBooksStats()])
-  } catch (error) {
-    console.error('Ошибка при загрузке данных:', error)
+function hideEditModal() {
+  if (bookToEdit.modalInstance) {
+    bookToEdit.modalInstance.hide()
+    bookToEdit.modalInstance = null
   }
+  // удаляем все backdrop
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  bookToEdit.id = null
+  bookToEdit.title = ''
+  bookToEdit.genre = null
+  bookToEdit.library = null
+}
+
+// --- Удаление ---
+function onRemoveClick(b) {
+  bookToDelete.id = b.id
+  bookToDelete.title = b.title
+  const modalEl = document.getElementById('deleteBookModal')
+  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteModalInstance.show()
+}
+
+async function confirmDelete() {
+  if (!bookToDelete.id) return
+  await axios.delete(`/books/${bookToDelete.id}/`)
+  await fetchBooks()
+  await fetchBookStats()
+  hideDeleteModal()
+}
+
+function hideDeleteModal() {
+  if (deleteModalInstance) deleteModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  bookToDelete.id = null
+  bookToDelete.title = ''
+}
+
+// --- Инициализация ---
+onMounted(async () => {
+  await fetchBooks()
+  await fetchBookStats()
+  await fetchGenres()
+  await fetchLibraries()
 })
 </script>
+
+<style scoped>
+.stats-line {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+</style>

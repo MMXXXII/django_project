@@ -1,16 +1,16 @@
 <template>
-  <h2>Библиотеки 
-    <span style="font-size: 0.9em; color: #6c757d;">
-      count ({{ libraryStats ? libraryStats.count : 0 }}), 
-      avg ({{ libraryStats ? libraryStats.avg : 0 }}), 
-      max ({{ libraryStats ? libraryStats.max : 0 }}), 
-      min ({{ libraryStats ? libraryStats.min : 0 }})
-    </span>
-  </h2>
+  <h2>Библиотеки</h2>
 
-  <!-- Фильтрация -->
+  <!-- Статистика -->
+  <div class="stats-line mb-3">
+    <div class="stat">Количество: {{ libraryStats?.count || 0 }}</div>
+    <div class="stat">Среднее: {{ libraryStats?.avg || 0 }}</div>
+    <div class="stat">Максимум: {{ libraryStats?.max || 0 }}</div>
+    <div class="stat">Минимум: {{ libraryStats?.min || 0 }}</div>
+  </div>
+
+  <!-- Поиск -->
   <div class="mb-3">
-    <!-- Поле для поиска по названию библиотеки -->
     <input 
       v-model="searchQuery" 
       type="text" 
@@ -20,7 +20,7 @@
     />
   </div>
 
-  <!-- Фильтр по алфавиту -->
+  <!-- Сортировка -->
   <div class="mb-3">
     <select v-model="sortOrder" @change="sortLibraries" class="form-select">
       <option value="asc">От A до Я</option>
@@ -35,38 +35,59 @@
         <input v-model="libraryToAdd.name" class="form-control" placeholder="Название библиотеки" required />
       </div>
       <div class="col-auto">
-        <button class="btn btn-primary">Добавить</button>
+        <button type="button" class="btn btn-outline-success" @click="onAddLibrary">Добавить</button>
       </div>
     </div>
   </form>
 
-  <!-- Список -->
+  <!-- Список библиотек -->
   <ul class="list-group">
     <li v-for="l in filteredLibraries" :key="l.id" class="list-group-item d-flex justify-content-between align-items-center">
       <div>{{ l.name }}</div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(l)" data-bs-toggle="modal" data-bs-target="#editLibraryModal">
+        <button class="btn btn-sm btn-success me-2" @click="onEditClick(l)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemove(l)"><i class="bi bi-x"></i></button>
+        <button class="btn btn-sm btn-danger" @click="onRemoveClick(l)">
+          <i class="bi bi-x"></i>
+        </button>
       </div>
     </li>
   </ul>
 
-  <!-- Модал для редактирования -->
+  <!-- Модалка редактирования -->
   <div class="modal fade" id="editLibraryModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Редактировать библиотеку</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title">Редактирование библиотеки</h5>
+          <button type="button" class="btn-close" @click="hideEditModal"></button>
         </div>
         <div class="modal-body">
-          <input v-model="libraryToEdit.name" class="form-control" />
+          <input v-model="libraryToEdit.name" class="form-control" placeholder="Название библиотеки" />
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-          <button class="btn btn-primary" @click="onUpdateLibrary" data-bs-dismiss="modal">Сохранить</button>
+          <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
+          <button type="button" class="btn btn-success" @click="onUpdateLibrary">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка удаления -->
+  <div class="modal fade" id="deleteLibraryModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление библиотеки</h5>
+          <button type="button" class="btn-close" @click="hideDeleteModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ libraryToDelete.name }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
         </div>
       </div>
     </div>
@@ -74,85 +95,128 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
+import * as bootstrap from 'bootstrap'
 
-const libraries = ref([]) // Храним все библиотеки
-const filteredLibraries = ref([]) // Храним фильтрованные библиотеки
+const libraries = ref([])
+const filteredLibraries = ref([])
 const libraryStats = ref(null)
-const libraryToAdd = ref({ name: '' })
-const libraryToEdit = ref({ id: null, name: '' })
-const searchQuery = ref("") // Состояние для поиска по названию библиотеки
-const sortOrder = ref("asc") // Состояние для сортировки (по умолчанию от A до Я)
 
+const libraryToAdd = reactive({ name: '' })
+const libraryToEdit = reactive({ id: null, name: '', modalInstance: null })
+const libraryToDelete = reactive({ id: null, name: '' })
+let deleteModalInstance = null
+
+const searchQuery = ref('')
+const sortOrder = ref('asc')
+
+// --- Получение данных ---
 async function fetchLibraries() {
-  try {
-    const res = await axios.get('/libraries/')
-    libraries.value = res.data
-    filteredLibraries.value = libraries.value
-  } catch (error) {
-    console.error('Ошибка при получении библиотек:', error)
-  }
+  const r = await axios.get('/libraries/')
+  libraries.value = r.data
+  filterLibraries()
 }
 
+async function fetchLibraryStats() {
+  const r = await axios.get('/libraries/stats/')
+  libraryStats.value = r.data
+}
+
+// --- Фильтр и сортировка ---
 function filterLibraries() {
-  // Фильтруем библиотеки по названию
-  filteredLibraries.value = libraries.value.filter(library => 
-    library.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  filteredLibraries.value = libraries.value.filter(l =>
+    l.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
-  sortLibraries() // После фильтрации, сортируем библиотеки
+  sortLibraries()
 }
 
 function sortLibraries() {
-  // Сортируем библиотеки по названию (по алфавиту)
   filteredLibraries.value.sort((a, b) => {
-    const nameA = a.name.toLowerCase()
-    const nameB = b.name.toLowerCase()
-
-    if (sortOrder.value === "asc") {
-      return nameA.localeCompare(nameB)
-    } else {
-      return nameB.localeCompare(nameA)
-    }
+    const A = a.name.toLowerCase()
+    const B = b.name.toLowerCase()
+    return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
   })
 }
 
-async function fetchLibrariesStats() {
-  try {
-    const response = await axios.get('/libraries/stats') // Эндпоинт для статистики
-    libraryStats.value = response.data // Сохраняем статистику библиотек в переменной libraryStats
-  } catch (error) {
-    console.error('Ошибка при получении статистики по библиотекам:', error)
-  }
-}
-
+// --- Добавление ---
 async function onAddLibrary() {
-  await axios.post('/libraries/', { ...libraryToAdd.value })
-  libraryToAdd.value = { name: '' }
-  await fetchLibraries() // Обновляем библиотеки после добавления
+  if (!libraryToAdd.name) return
+  await axios.post('/libraries/', { ...libraryToAdd })
+  libraryToAdd.name = ''
+  await fetchLibraries()
+  await fetchLibraryStats()
 }
 
-async function onRemove(l) {
-  if (!confirm(`Удалить библиотеку "${l.name}"?`)) return
-  await axios.delete(`/libraries/${l.id}/`)
-  await fetchLibraries() // Обновляем список после удаления
-}
-
+// --- Редактирование ---
 function onEditClick(l) {
-  libraryToEdit.value = { ...l }
+  libraryToEdit.id = l.id
+  libraryToEdit.name = l.name
+  const modalEl = document.getElementById('editLibraryModal')
+  libraryToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  libraryToEdit.modalInstance.show()
 }
 
 async function onUpdateLibrary() {
-  await axios.put(`/libraries/${libraryToEdit.value.id}/`, { ...libraryToEdit.value })
-  await fetchLibraries() // Обновляем список библиотек после редактирования
-  await fetchLibrariesStats() // Обновляем статистику по библиотекам
+  if (!libraryToEdit.id) return
+  await axios.put(`/libraries/${libraryToEdit.id}/`, { name: libraryToEdit.name })
+  await fetchLibraries()
+  await fetchLibraryStats()
+  hideEditModal()
 }
 
-onMounted(async () => {
-  try {
-    await Promise.all([fetchLibraries(), fetchLibrariesStats()])
-  } catch (error) {
-    console.error('Ошибка при загрузке данных:', error)
+function hideEditModal() {
+  if (libraryToEdit.modalInstance) {
+    libraryToEdit.modalInstance.hide()
+    libraryToEdit.modalInstance = null
   }
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  libraryToEdit.id = null
+  libraryToEdit.name = ''
+}
+
+// --- Удаление ---
+function onRemoveClick(l) {
+  libraryToDelete.id = l.id
+  libraryToDelete.name = l.name
+  const modalEl = document.getElementById('deleteLibraryModal')
+  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteModalInstance.show()
+}
+
+async function confirmDelete() {
+  if (!libraryToDelete.id) return
+  await axios.delete(`/libraries/${libraryToDelete.id}/`)
+  await fetchLibraries()
+  await fetchLibraryStats()
+  hideDeleteModal()
+}
+
+function hideDeleteModal() {
+  if (deleteModalInstance) deleteModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  libraryToDelete.id = null
+  libraryToDelete.name = ''
+}
+
+// --- Инициализация ---
+onMounted(async () => {
+  await Promise.all([fetchLibraries(), fetchLibraryStats()])
 })
 </script>
+
+<style scoped>
+.stats-line {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+</style>

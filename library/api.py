@@ -81,9 +81,11 @@ class MemberViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Только свои читатели
         return Member.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
+        # Автоматически ставим текущего пользователя
         serializer.save(user=self.request.user)
 
     @action(detail=False, methods=['get'])
