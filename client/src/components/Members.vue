@@ -1,14 +1,15 @@
 <template>
-  <h2>Читатели 
-    <span style="font-size: 0.9em; color: #6c757d;">
-      count ({{ memberStats ? memberStats.count : 0 }}), 
-      avg ({{ memberStats ? memberStats.avg : 0 }}), 
-      max ({{ memberStats ? memberStats.max : 0 }}), 
-      min ({{ memberStats ? memberStats.min : 0 }})
-    </span>
-  </h2>
+  <h2>Читатели</h2>
 
-  <!-- Фильтрация -->
+  <!-- Статистика -->
+  <div class="stats-line">
+    <div class="stat">Количество: {{ memberStats?.count || 0 }}</div>
+    <div class="stat">Среднее: {{ memberStats?.avg || 0 }}</div>
+    <div class="stat">Максимум: {{ memberStats?.max || 0 }}</div>
+    <div class="stat">Минимум: {{ memberStats?.min || 0 }}</div>
+  </div>
+
+  <!-- Поиск -->
   <div class="mb-3">
     <input 
       v-model="searchQuery" 
@@ -19,7 +20,7 @@
     />
   </div>
 
-  <!-- Фильтр по алфавиту -->
+  <!-- Сортировка -->
   <div class="mb-3">
     <select v-model="sortOrder" @change="sortMembers" class="form-select">
       <option value="asc">От A до Я</option>
@@ -31,131 +32,249 @@
   <form class="mb-3" @submit.prevent="onAddMember">
     <div class="row g-2 align-items-center">
       <div class="col">
-        <input v-model="memberToAdd.first_name" class="form-control" placeholder="Имя" required />
+        <input 
+          v-model="memberToAdd.first_name" 
+          class="form-control" 
+          placeholder="Имя" 
+          required 
+        />
       </div>
+
       <div class="col-auto">
         <select v-model="memberToAdd.library" class="form-select" required>
-          <option v-for="l in libraries" :value="l.id" :key="l.id">{{ l.name }}</option>
+          <option value="">Выберите библиотеку</option>
+          <option v-for="l in libraries" :key="l.id" :value="Number(l.id)">
+            {{ l.name }}
+          </option>
         </select>
       </div>
+
       <div class="col-auto">
-        <button class="btn btn-primary">Добавить</button>
+        <button type="button" class="btn btn-outline-success">Успех</button>
       </div>
     </div>
   </form>
 
-  <!-- Список -->
+  <!-- Список читателей -->
   <ul class="list-group">
-    <li v-for="m in filteredMembers" :key="m.id" class="list-group-item d-flex justify-content-between align-items-center">
+    <li 
+      v-for="m in filteredMembers" 
+      :key="m.id" 
+      class="list-group-item d-flex justify-content-between align-items-center"
+    >
       <div>
         <strong>{{ m.first_name }}</strong>
         <div class="text-muted small">
-          {{ librariesById[m.library]?.name }}
+          {{ librariesById[m.library]?.name ?? 'Нет библиотеки' }}
         </div>
       </div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(m)" data-bs-toggle="modal" data-bs-target="#editMemberModal">
+        <!-- Редактировать -->
+        <button 
+          class="btn btn-sm btn-success me-2" 
+          @click="onEditClick(m)"
+          data-bs-toggle="modal" 
+          data-bs-target="#editMemberModal"
+        >
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemove(m)"><i class="bi bi-x"></i></button>
+
+        <!-- Удалить -->
+        <button 
+          class="btn btn-sm btn-danger" 
+          @click="onRemoveClick(m)"
+          data-bs-toggle="modal"
+          data-bs-target="#deleteMemberModal"
+        >
+          <i class="bi bi-x"></i>
+        </button>
       </div>
     </li>
   </ul>
+
+  <!-- Модалка редактирования -->
+  <div class="modal fade" id="editMemberModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Редактирование читателя</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input v-model="memberToEdit.first_name" class="form-control mb-2" placeholder="Имя" />
+          <select v-model="memberToEdit.library" class="form-select">
+            <option v-for="l in libraries" :key="l.id" :value="Number(l.id)">
+              {{ l.name }}
+            </option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-success" @click="onUpdateMember">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка удаления -->
+  <div class="modal fade" id="deleteMemberModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление читателя</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ memberToDelete.first_name }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
+import * as bootstrap from 'bootstrap'
 
-// Состояния и переменные
-const members = ref([]) // Храним всех читателей
-const filteredMembers = ref([]) // Храним фильтрованных читателей
-const libraries = ref([]) // Библиотеки
-const memberStats = ref(null) // Статистика
-const memberToAdd = ref({ first_name: '', library: null })
-const memberToEdit = ref({ id: null, first_name: '', library: null })
-const searchQuery = ref("") // Состояние для поиска по имени читателя
-const sortOrder = ref("asc") // Состояние для сортировки (по умолчанию от A до Я)
+// Данные
+const members = ref([])
+const filteredMembers = ref([])
+const libraries = ref([])
+const memberStats = ref(null)
 
-const librariesById = computed(() => Object.fromEntries(libraries.value.map(l => [l.id, l])))
+// Добавление и редактирование
+const memberToAdd = reactive({ first_name: '', library: '' })
+const memberToEdit = reactive({ id: null, first_name: '', library: '' })
 
+// Удаление
+const memberToDelete = reactive({ id: null, first_name: '' })
+let deleteModalInstance = null
+
+// Поиск и сортировка
+const searchQuery = ref('')
+const sortOrder = ref('asc')
+
+const librariesById = computed(() =>
+  Object.fromEntries(libraries.value.map(l => [l.id, l]))
+)
+
+// Получение данных с API
 async function fetchMembers() {
-  try {
-    const res = await axios.get('/members/')
-    members.value = res.data
-    filteredMembers.value = members.value
-  } catch (error) {
-    console.error('Ошибка при получении читателей:', error)
-  }
+  const r = await axios.get('/members/')
+  members.value = r.data
+  filterMembers()
 }
 
 async function fetchLibraries() {
-  try {
-    const res = await axios.get('/libraries/')
-    libraries.value = res.data
-  } catch (error) {
-    console.error('Ошибка при получении библиотек:', error)
-  }
+  const r = await axios.get('/libraries/')
+  libraries.value = r.data
 }
 
 async function fetchMemberStats() {
-  try {
-    const response = await axios.get('/members/stats') // Эндпоинт для статистики
-    memberStats.value = response.data // Сохраняем статистику по читателям в переменной
-  } catch (error) {
-    console.error('Ошибка при получении статистики читателей:', error)
-  }
+  const r = await axios.get('/members/stats/')
+  memberStats.value = r.data
 }
 
-// Фильтрация по имени
+// Фильтр и сортировка
 function filterMembers() {
-  filteredMembers.value = members.value.filter(member =>
-    member.first_name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  filteredMembers.value = members.value.filter(m =>
+    m.first_name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
-  sortMembers() // После фильтрации, сортируем
+  sortMembers()
 }
 
-// Сортировка по алфавиту
 function sortMembers() {
   filteredMembers.value.sort((a, b) => {
-    const nameA = a.first_name.toLowerCase()
-    const nameB = b.first_name.toLowerCase()
-
-    if (sortOrder.value === "asc") {
-      return nameA.localeCompare(nameB)
-    } else {
-      return nameB.localeCompare(nameA)
-    }
+    const A = a.first_name.toLowerCase()
+    const B = b.first_name.toLowerCase()
+    return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
   })
 }
 
+// Добавление
 async function onAddMember() {
-  await axios.post('/members/', { ...memberToAdd.value })
-  memberToAdd.value = { first_name: '', library: null }
-  await fetchMembers() // Обновляем список после добавления
+  const payload = { 
+    first_name: memberToAdd.first_name, 
+    library: Number(memberToAdd.library) 
+  }
+  await axios.post('/members/', payload)
+  memberToAdd.first_name = ''
+  memberToAdd.library = ''
+  await fetchMembers()
+  await fetchMemberStats()
 }
 
-async function onRemove(m) {
-  if (!confirm(`Удалить читателя "${m.first_name}"?`)) return
-  await axios.delete(`/members/${m.id}/`)
-  await fetchMembers() // Обновляем список после удаления
-}
-
+// Редактирование
 function onEditClick(m) {
-  memberToEdit.value = { ...m }
+  memberToEdit.id = m.id
+  memberToEdit.first_name = m.first_name
+  memberToEdit.library = m.library
+
+  const modalEl = document.getElementById('editMemberModal')
+  const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  modalInstance.show()
 }
 
 async function onUpdateMember() {
-  await axios.put(`/members/${memberToEdit.value.id}/`, { ...memberToEdit.value })
-  await fetchMembers() // Обновляем список после редактирования
-  await fetchMemberStats() // Обновляем статистику по читателям
+  const payload = { 
+    first_name: memberToEdit.first_name, 
+    library: Number(memberToEdit.library) 
+  }
+  await axios.put(`/members/${memberToEdit.id}/`, payload)
+  await fetchMembers()
+  await fetchMemberStats()
+  // закрываем модалку вручную
+  const modalEl = document.getElementById('editMemberModal')
+  bootstrap.Modal.getInstance(modalEl).hide()
 }
 
+// Удаление
+function onRemoveClick(m) {
+  memberToDelete.id = m.id
+  memberToDelete.first_name = m.first_name
+
+  const modalEl = document.getElementById('deleteMemberModal')
+  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteModalInstance.show()
+}
+
+async function confirmDelete() {
+  if (!memberToDelete.id) return
+  await axios.delete(`/members/${memberToDelete.id}/`)
+  await fetchMembers()
+  await fetchMemberStats()
+  deleteModalInstance.hide()
+  memberToDelete.id = null
+  memberToDelete.first_name = ''
+}
+
+// Инициализация
 onMounted(async () => {
-  try {
-    await Promise.all([fetchMembers(), fetchLibraries(), fetchMemberStats()])
-  } catch (error) {
-    console.error('Ошибка при загрузке данных:', error)
-  }
+  await fetchMembers()
+  await fetchLibraries()
+  await fetchMemberStats()
 })
 </script>
+
+<style scoped>
+.stats-line {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+</style>
+  

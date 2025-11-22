@@ -1,0 +1,196 @@
+<template>
+  <div class="login-container">
+    <!-- Первый этап: логин и пароль -->
+    <form v-if="!showOtpInput" @submit.prevent="handleLogin">
+      <div class="form-group">
+        <label for="username">Имя пользователя:</label>
+        <input 
+          type="text" 
+          v-model="username" 
+          id="username" 
+          required 
+        />
+      </div>
+      <div class="form-group">
+        <label for="password">Пароль:</label>
+        <input 
+          type="password" 
+          v-model="password" 
+          id="password" 
+          required 
+        />
+      </div>
+      <!-- убрали кнопку "Войти" с this этапа - она уже есть, добавлен только submit -->
+      <button type="submit" :disabled="userStore.loading">
+        {{ userStore.loading ? 'Загрузка...' : 'Далее' }}
+      </button>
+    </form>
+
+    <!-- Второй этап: OTP код -->
+    <form v-else @submit.prevent="handleOtpSubmit">
+      <!-- Убрали заголовок "Авторизация", упрощена информация -->
+      <div class="otp-info">
+        <p class="info-title">Введите код подтверждения</p>
+        <p class="info-text">Код действителен 5 минут</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="otp">Код подтверждения:</label>
+        <input 
+          type="text" 
+          v-model="otpCode" 
+          id="otp" 
+          required 
+          placeholder="000000"
+          maxlength="6"
+          inputmode="numeric"
+        />
+      </div>
+
+      <button type="submit" :disabled="userStore.loading || otpCode.length !== 6">
+        {{ userStore.loading ? 'Проверка...' : 'Подтвердить' }}
+      </button>
+      <button type="button" @click="handleBack" class="back-btn" :disabled="userStore.loading">
+        Назад
+      </button>
+    </form>
+
+    <div v-if="userStore.error" class="error-message">
+      {{ userStore.error }}
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '../stores/userStore'
+
+const router = useRouter()
+const userStore = useUserStore()
+
+const username = ref('')
+const password = ref('')
+const otpCode = ref('')
+const showOtpInput = ref(false)
+const userEmail = ref('')
+
+async function handleLogin() {
+  try {
+    const result = await userStore.login(username.value, password.value)
+    userEmail.value = result.email
+    showOtpInput.value = true
+    userStore.error = null
+  } catch (err) {
+    console.error('Ошибка при входе:', err)
+  }
+}
+
+async function handleOtpSubmit() {
+  try {
+    const success = await userStore.verifyOtp(otpCode.value)
+    if (success) {
+      username.value = ''
+      password.value = ''
+      otpCode.value = ''
+      showOtpInput.value = false
+      router.push('/books')
+    }
+  } catch (err) {
+    console.error('Ошибка при проверке OTP:', err)
+  }
+}
+
+function handleBack() {
+  showOtpInput.value = false
+  otpCode.value = ''
+  username.value = ''
+  password.value = ''
+  userStore.error = null
+}
+</script>
+
+<style scoped>
+.login-container {
+  max-width: 400px;
+  margin: 50px auto;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.back-btn {
+  background-color: #6c757d;
+}
+
+.back-btn:hover:not(:disabled) {
+  background-color: #5a6268;
+}
+
+.error-message {
+  color: red;
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #ffe6e6;
+  border-radius: 4px;
+}
+
+.otp-info {
+  background-color: #f0f8ff;
+  border-left: 4px solid #007bff;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
+.info-title {
+  margin: 0 0 10px 0;
+  font-weight: bold;
+  color: #0056b3;
+}
+
+.info-text {
+  margin: 5px 0 0 0;
+  color: #666;
+  font-size: 14px;
+}
+</style>

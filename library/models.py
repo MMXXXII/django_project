@@ -4,7 +4,8 @@ from django.contrib.auth.models import User
 # Create your models here.
 class Genre(models.Model):
     name = models.TextField("Жанр")
-    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
+
     class Meta:
         verbose_name = "Жанр"
         verbose_name_plural = "Жанры"
@@ -16,6 +17,7 @@ class Genre(models.Model):
 class Library(models.Model):
     name = models.TextField("Название библиотеки")
     address = models.TextField("Адрес")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
 
     class Meta:
         verbose_name = "Библиотека"
@@ -29,11 +31,9 @@ class Book(models.Model):
     title = models.TextField("Название книги")
     genre = models.ForeignKey(Genre, on_delete=models.CASCADE, verbose_name="Жанр")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
-    
-    # Новое поле для фото книги
     cover = models.ImageField("Обложка", upload_to="books", null=True, blank=True)
-    user = models.ForeignKey("auth.User", verbose_name="Пользователь", on_delete=models.CASCADE, null=True)
-    
+    user = models.ForeignKey(User, verbose_name="Пользователь", on_delete=models.CASCADE, null=True, blank=True)
+
     class Meta:
         verbose_name = "Книга"
         verbose_name_plural = "Книги"
@@ -45,6 +45,7 @@ class Book(models.Model):
 class Member(models.Model):
     first_name = models.TextField("Имя")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
 
     class Meta:
         verbose_name = "Читатель"
@@ -54,10 +55,12 @@ class Member(models.Model):
         return self.first_name
 
 
+
 class Loan(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE, verbose_name="Книга")
     member = models.ForeignKey(Member, on_delete=models.CASCADE, verbose_name="Читатель")
     loan_date = models.DateField("Дата выдачи")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
 
     class Meta:
         verbose_name = "Выдача книги"
