@@ -3,15 +3,12 @@
 
   <!-- Статистика + кнопки -->
   <div class="stats-line">
-    <!-- Статистика слева -->
     <div class="stats-left">
       <div class="stat">Количество: {{ genreStats?.count || 0 }}</div>
       <div class="stat">Среднее: {{ genreStats?.avg || 0 }}</div>
       <div class="stat">Максимум: {{ genreStats?.max || 0 }}</div>
       <div class="stat">Минимум: {{ genreStats?.min || 0 }}</div>
     </div>
-
-    <!-- Кнопки справа -->
     <div class="stats-right">
       <button class="btn btn-success btn-sm me-2" @click="exportGenresExcel">Excel</button>
       <button class="btn btn-primary btn-sm" @click="exportGenresWord">Word</button>
@@ -49,15 +46,28 @@
     </div>
   </form>
 
+  <!-- Кнопка массового удаления -->
+  <div v-if="selectedGenres.length" class="mb-3">
+    <button class="btn btn-danger" @click="showDeleteSelectedModal">
+      Удалить выбранные ({{ selectedGenres.length }})
+    </button>
+  </div>
+
   <!-- Список жанров -->
   <ul class="list-group">
-    <li v-for="g in filteredGenres" :key="g.id" class="list-group-item d-flex justify-content-between align-items-center">
+    <li 
+      v-for="g in filteredGenres" 
+      :key="g.id" 
+      class="list-group-item d-flex justify-content-between align-items-center"
+      :class="{ 'selected': selectedGenres.includes(g.id) }"
+      @click="toggleSelection(g.id)"
+    >
       <div>{{ g.name }}</div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(g)">
+        <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(g)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemoveClick(g)">
+        <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(g)">
           <i class="bi bi-x"></i>
         </button>
       </div>
@@ -100,6 +110,25 @@
       </div>
     </div>
   </div>
+
+  <!-- Модалка массового удаления -->
+  <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление выбранных жанров</h5>
+          <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ selectedGenres.length }}</strong> выбранных жанров?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -118,6 +147,8 @@ let deleteModalInstance = null
 
 const searchQuery = ref('')
 const sortOrder = ref('asc')
+const selectedGenres = ref([])
+let deleteSelectedModalInstance = null
 
 // --- Получение данных ---
 async function fetchGenres() {
@@ -180,7 +211,7 @@ function hideEditModal() {
   genreToEdit.name = ''
 }
 
-// --- Удаление ---
+// --- Удаление одного ---
 function onRemoveClick(g) {
   genreToDelete.id = g.id
   genreToDelete.name = g.name
@@ -202,6 +233,37 @@ function hideDeleteModal() {
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   genreToDelete.id = null
   genreToDelete.name = ''
+}
+
+// --- Выделение ---
+function toggleSelection(id) {
+  if (selectedGenres.value.includes(id)) {
+    selectedGenres.value = selectedGenres.value.filter(x => x !== id)
+  } else {
+    selectedGenres.value.push(id)
+  }
+}
+
+// --- Модалка массового удаления ---
+function showDeleteSelectedModal() {
+  const modalEl = document.getElementById('deleteSelectedModal')
+  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteSelectedModalInstance.show()
+}
+
+function hideDeleteSelectedModal() {
+  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+}
+
+// --- Массовое удаление ---
+async function confirmDeleteSelected() {
+  if (!selectedGenres.value.length) return
+  await Promise.all(selectedGenres.value.map(id => axios.delete(`/genres/${id}/`)))
+  selectedGenres.value = []
+  await fetchGenres()
+  await fetchGenreStats()
+  hideDeleteSelectedModal()
 }
 
 // --- Экспорт ---
@@ -259,5 +321,12 @@ onMounted(async () => {
   padding: 4px 10px;
   border-radius: 6px;
   color: #333;
+}
+
+/* Подсветка выделенных жанров */
+.list-group-item.selected {
+  background-color: #d1e7dd;
+  border-color: #0f5132;
+  color: #0f5132;
 }
 </style>

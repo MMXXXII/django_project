@@ -46,22 +46,89 @@
     </div>
   </form>
 
+  <!-- Кнопка массового удаления -->
+  <div v-if="selectedLibraries.length" class="mb-3">
+    <button class="btn btn-danger" @click="showDeleteSelectedModal">
+      Удалить выбранные ({{ selectedLibraries.length }})
+    </button>
+  </div>
+
   <!-- Список библиотек -->
   <ul class="list-group">
-    <li v-for="l in filteredLibraries" :key="l.id" class="list-group-item d-flex justify-content-between align-items-center">
+    <li 
+      v-for="l in filteredLibraries" 
+      :key="l.id" 
+      class="list-group-item d-flex justify-content-between align-items-center"
+      :class="{ 'selected': selectedLibraries.includes(l.id) }"
+      @click="toggleSelection(l.id)"
+    >
       <div>{{ l.name }}</div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(l)">
+        <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(l)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemoveClick(l)">
+        <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
           <i class="bi bi-x"></i>
         </button>
       </div>
     </li>
   </ul>
 
-  <!-- Модалки редактирования и удаления остаются без изменений -->
+  <!-- Модалки редактирования и удаления -->
+  <div class="modal fade" id="editLibraryModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Редактирование библиотеки</h5>
+          <button type="button" class="btn-close" @click="hideEditModal"></button>
+        </div>
+        <div class="modal-body">
+          <input v-model="libraryToEdit.name" class="form-control" placeholder="Название библиотеки" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
+          <button type="button" class="btn btn-success" @click="onUpdateLibrary">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="deleteLibraryModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление библиотеки</h5>
+          <button type="button" class="btn-close" @click="hideDeleteModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ libraryToDelete.name }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка массового удаления -->
+  <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление выбранных библиотек</h5>
+          <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ selectedLibraries.length }}</strong> выбранных библиотек?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -76,7 +143,9 @@ const libraryStats = ref(null)
 const libraryToAdd = reactive({ name: '' })
 const libraryToEdit = reactive({ id: null, name: '', modalInstance: null })
 const libraryToDelete = reactive({ id: null, name: '' })
+const selectedLibraries = ref([])
 let deleteModalInstance = null
+let deleteSelectedModalInstance = null
 
 const searchQuery = ref('')
 const sortOrder = ref('asc')
@@ -109,7 +178,7 @@ function sortLibraries() {
   })
 }
 
-// --- Добавление / редактирование / удаление ---
+// --- Добавление ---
 async function onAddLibrary() {
   if (!libraryToAdd.name) return
   await axios.post('/libraries/', { ...libraryToAdd })
@@ -118,6 +187,7 @@ async function onAddLibrary() {
   await fetchLibraryStats()
 }
 
+// --- Редактирование ---
 function onEditClick(l) {
   libraryToEdit.id = l.id
   libraryToEdit.name = l.name
@@ -126,6 +196,22 @@ function onEditClick(l) {
   libraryToEdit.modalInstance.show()
 }
 
+async function onUpdateLibrary() {
+  if (!libraryToEdit.id) return
+  await axios.put(`/libraries/${libraryToEdit.id}/`, { name: libraryToEdit.name })
+  await fetchLibraries()
+  await fetchLibraryStats()
+  hideEditModal()
+}
+
+function hideEditModal() {
+  if (libraryToEdit.modalInstance) libraryToEdit.modalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  libraryToEdit.id = null
+  libraryToEdit.name = ''
+}
+
+// --- Удаление одного ---
 function onRemoveClick(l) {
   libraryToDelete.id = l.id
   libraryToDelete.name = l.name
@@ -147,6 +233,37 @@ function hideDeleteModal() {
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   libraryToDelete.id = null
   libraryToDelete.name = ''
+}
+
+// --- Выделение ---
+function toggleSelection(id) {
+  if (selectedLibraries.value.includes(id)) {
+    selectedLibraries.value = selectedLibraries.value.filter(x => x !== id)
+  } else {
+    selectedLibraries.value.push(id)
+  }
+}
+
+// --- Модалка массового удаления ---
+function showDeleteSelectedModal() {
+  const modalEl = document.getElementById('deleteSelectedModal')
+  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteSelectedModalInstance.show()
+}
+
+function hideDeleteSelectedModal() {
+  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+}
+
+// --- Массовое удаление ---
+async function confirmDeleteSelected() {
+  if (!selectedLibraries.value.length) return
+  await Promise.all(selectedLibraries.value.map(id => axios.delete(`/libraries/${id}/`)))
+  selectedLibraries.value = []
+  await fetchLibraries()
+  await fetchLibraryStats()
+  hideDeleteSelectedModal()
 }
 
 // --- Экспорт данных ---
@@ -206,5 +323,12 @@ onMounted(async () => {
   padding: 4px 10px;
   border-radius: 6px;
   color: #333;
+}
+
+/* Подсветка выделенных библиотек */
+.list-group-item.selected {
+  background-color: #d1e7dd;
+  border-color: #0f5132;
+  color: #0f5132;
 }
 </style>

@@ -56,25 +56,98 @@
     </div>
   </form>
 
+  <!-- Кнопка массового удаления -->
+  <div v-if="selectedLoans.length" class="mb-3">
+    <button class="btn btn-danger" @click="showDeleteSelectedModal">
+      Удалить выбранные ({{ selectedLoans.length }})
+    </button>
+  </div>
+
   <!-- Список выдач -->
   <ul class="list-group">
-    <li v-for="l in filteredLoans" :key="l.id" class="list-group-item d-flex justify-content-between align-items-center">
+    <li 
+      v-for="l in filteredLoans" 
+      :key="l.id" 
+      class="list-group-item d-flex justify-content-between align-items-center"
+      :class="{ 'selected': selectedLoans.includes(l.id) }"
+      @click="toggleSelection(l.id)"
+    >
       <div>
         <div><strong>{{ booksById[l.book]?.title }}</strong> → {{ membersById[l.member]?.first_name }}</div>
         <div class="small text-muted">{{ l.loan_date }}</div>
       </div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click="onEditClick(l)">
+        <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(l)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click="onRemoveClick(l)">
+        <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
           <i class="bi bi-x"></i>
         </button>
       </div>
     </li>
   </ul>
 
-  <!-- Модалки редактирования и удаления остаются без изменений -->
+  <!-- Модалки редактирования и удаления одного -->
+  <div class="modal fade" id="editLoanModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Редактирование выдачи</h5>
+          <button type="button" class="btn-close" @click="hideEditModal"></button>
+        </div>
+        <div class="modal-body">
+          <select v-model="loanToEdit.book" class="form-select mb-2">
+            <option v-for="b in books" :key="b.id" :value="b.id">{{ b.title }}</option>
+          </select>
+          <select v-model="loanToEdit.member" class="form-select mb-2">
+            <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }}</option>
+          </select>
+          <input type="date" v-model="loanToEdit.loan_date" class="form-control" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
+          <button type="button" class="btn btn-success" @click="onUpdateLoan">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="deleteLoanModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление выдачи</h5>
+          <button type="button" class="btn-close" @click="hideDeleteModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ loanToDeleteDisplay }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка массового удаления -->
+  <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Удаление выбранных выдач</h5>
+          <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
+        </div>
+        <div class="modal-body">
+          Вы действительно хотите удалить <strong>{{ selectedLoans.length }}</strong> выбранных выдач?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
+          <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -91,7 +164,10 @@ const loanStats = ref(null)
 const loanToAdd = reactive({ book: null, member: null, loan_date: '' })
 const loanToEdit = reactive({ id: null, book: null, member: null, loan_date: '', modalInstance: null })
 const loanToDelete = reactive({ id: null, book: null, member: null, loan_date: '' })
+const selectedLoans = ref([])
+
 let deleteModalInstance = null
+let deleteSelectedModalInstance = null
 
 const searchQuery = ref('')
 const sortOrder = ref('asc')
@@ -109,30 +185,17 @@ async function fetchLoans() {
   loans.value = r.data
   filterLoans()
 }
+async function fetchBooks() { books.value = (await axios.get('/books/')).data }
+async function fetchMembers() { members.value = (await axios.get('/members/')).data }
+async function fetchLoanStats() { loanStats.value = (await axios.get('/loans/stats/')).data }
 
-async function fetchBooks() {
-  const r = await axios.get('/books/')
-  books.value = r.data
-}
-
-async function fetchMembers() {
-  const r = await axios.get('/members/')
-  members.value = r.data
-}
-
-async function fetchLoanStats() {
-  const r = await axios.get('/loans/stats/')
-  loanStats.value = r.data
-}
-
-// --- Фильтр и сортировка ---
 watch([loans, books, members], filterLoans, { deep: true })
 
 function filterLoans() {
-  filteredLoans.value = loans.value.filter(loan => {
-    const bookTitle = booksById.value[loan.book]?.title?.toLowerCase() || ''
-    const memberName = membersById.value[loan.member]?.first_name?.toLowerCase() || ''
-    const query = searchQuery.value.toLowerCase()
+  const query = searchQuery.value.toLowerCase()
+  filteredLoans.value = loans.value.filter(l => {
+    const bookTitle = booksById.value[l.book]?.title?.toLowerCase() || ''
+    const memberName = membersById.value[l.member]?.first_name?.toLowerCase() || ''
     return bookTitle.includes(query) || memberName.includes(query)
   })
   sortLoans()
@@ -146,7 +209,7 @@ function sortLoans() {
   })
 }
 
-// --- Добавление / редактирование / удаление ---
+// --- Добавление ---
 async function onAddLoan() {
   if (!loanToAdd.book || !loanToAdd.member || !loanToAdd.loan_date) return
   await axios.post('/loans/', { ...loanToAdd })
@@ -157,6 +220,7 @@ async function onAddLoan() {
   await fetchLoanStats()
 }
 
+// --- Редактирование ---
 function onEditClick(l) {
   loanToEdit.id = l.id
   loanToEdit.book = l.book
@@ -165,6 +229,18 @@ function onEditClick(l) {
   const modalEl = document.getElementById('editLoanModal')
   loanToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   loanToEdit.modalInstance.show()
+}
+
+async function onUpdateLoan() {
+  if (!loanToEdit.id) return
+  await axios.put(`/loans/${loanToEdit.id}/`, {
+    book: loanToEdit.book,
+    member: loanToEdit.member,
+    loan_date: loanToEdit.loan_date
+  })
+  await fetchLoans()
+  await fetchLoanStats()
+  hideEditModal()
 }
 
 function hideEditModal() {
@@ -176,6 +252,7 @@ function hideEditModal() {
   loanToEdit.loan_date = ''
 }
 
+// --- Удаление одного ---
 function onRemoveClick(l) {
   loanToDelete.id = l.id
   loanToDelete.book = l.book
@@ -186,32 +263,71 @@ function onRemoveClick(l) {
   deleteModalInstance.show()
 }
 
+async function confirmDelete() {
+  if (!loanToDelete.id) return
+  await axios.delete(`/loans/${loanToDelete.id}/`)
+  await fetchLoans()
+  await fetchLoanStats()
+  hideDeleteModal()
+}
+
+function hideDeleteModal() {
+  if (deleteModalInstance) deleteModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  loanToDelete.id = null
+  loanToDelete.book = null
+  loanToDelete.member = null
+  loanToDelete.loan_date = ''
+}
+
+// --- Выделение ---
+function toggleSelection(id) {
+  if (selectedLoans.value.includes(id)) {
+    selectedLoans.value = selectedLoans.value.filter(x => x !== id)
+  } else {
+    selectedLoans.value.push(id)
+  }
+}
+
+// --- Модалка массового удаления ---
+function showDeleteSelectedModal() {
+  const modalEl = document.getElementById('deleteSelectedModal')
+  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteSelectedModalInstance.show()
+}
+
+function hideDeleteSelectedModal() {
+  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+}
+
+// --- Массовое удаление ---
+async function confirmDeleteSelected() {
+  if (!selectedLoans.value.length) return
+  await Promise.all(selectedLoans.value.map(id => axios.delete(`/loans/${id}/`)))
+  selectedLoans.value = []
+  await fetchLoans()
+  await fetchLoanStats()
+  hideDeleteSelectedModal()
+}
+
 // --- Экспорт данных ---
-function exportLoansExcel() {
-  exportLoans('excel')
-}
-
-function exportLoansWord() {
-  exportLoans('word')
-}
-
+function exportLoansExcel() { exportLoans('excel') }
+function exportLoansWord() { exportLoans('word') }
 function exportLoans(type = 'excel') {
   axios({
     url: `/loans/export/?type=${type}`,
     method: 'GET',
     responseType: 'blob'
-  }).then(response => {
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+  }).then(res => {
+    const url = window.URL.createObjectURL(new Blob([res.data]))
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', type === 'excel' ? 'loans.xlsx' : 'loans.docx')
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-  }).catch(err => {
-    console.error('Ошибка при скачивании:', err)
-    alert('Ошибка при скачивании файла')
-  })
+  }).catch(err => { console.error(err); alert('Ошибка при скачивании файла') })
 }
 
 // --- Инициализация ---
@@ -243,5 +359,12 @@ onMounted(async () => {
   padding: 4px 10px;
   border-radius: 6px;
   color: #333;
+}
+
+/* Подсветка выделенных выдач */
+.list-group-item.selected {
+  background-color: #d1e7dd;
+  border-color: #0f5132;
+  color: #0f5132;
 }
 </style>

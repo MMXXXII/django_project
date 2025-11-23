@@ -2,7 +2,7 @@
   <div>
     <h2>Читатели</h2>
 
-    <!-- Статистика и кнопки -->
+    <!-- Статистика + кнопки -->
     <div class="stats-line">
       <div class="stats-left">
         <div class="stat">Количество: {{ memberStats?.count || 0 }}</div>
@@ -56,12 +56,21 @@
       </div>
     </form>
 
+    <!-- Кнопка массового удаления -->
+    <div v-if="selectedMembers.length" class="mb-3">
+      <button class="btn btn-danger" @click="showDeleteSelectedModal">
+        Удалить выбранных ({{ selectedMembers.length }})
+      </button>
+    </div>
+
     <!-- Список читателей -->
     <ul class="list-group">
       <li 
         v-for="m in filteredMembers" 
         :key="m.id" 
         class="list-group-item d-flex justify-content-between align-items-center"
+        :class="{ 'selected': selectedMembers.includes(m.id) }"
+        @click="toggleSelection(m.id)"
       >
         <div class="d-flex align-items-center gap-2">
           <img 
@@ -70,7 +79,7 @@
             alt="Фото" 
             class="img-thumbnail" 
             style="height:50px; cursor:pointer;" 
-            @click="showPhotoModal(m.photo_url)" 
+            @click.stop="showPhotoModal(m.photo_url)" 
           />
           <div>
             <strong>{{ m.first_name }}</strong>
@@ -78,10 +87,10 @@
           </div>
         </div>
         <div>
-          <button class="btn btn-sm btn-success me-2" @click="onEditClick(m)">
+          <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(m)">
             <i class="bi bi-pen-fill"></i>
           </button>
-          <button class="btn btn-sm btn-danger" @click="onRemoveClick(m)">
+          <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(m)">
             <i class="bi bi-x"></i>
           </button>
         </div>
@@ -132,6 +141,25 @@
       </div>
     </div>
 
+    <!-- Модалка массового удаления -->
+    <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Удаление выбранных читателей</h5>
+            <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
+          </div>
+          <div class="modal-body">
+            Вы действительно хотите удалить <strong>{{ selectedMembers.length }}</strong> выбранных читателей?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
+            <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal fade" id="photoModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -144,6 +172,7 @@
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -161,21 +190,20 @@ const memberToAdd = reactive({ first_name: '', library: null, photoFile: null })
 const memberToEdit = reactive({ id: null, first_name: '', library: null, photoFile: null, photo_url: null, modalInstance: null })
 const memberToDelete = reactive({ id: null, first_name: '' })
 
+const selectedMembers = ref([])
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 const photoModalUrl = ref(null)
 let photoModalInstance = null
 let deleteModalInstance = null
+let deleteSelectedModalInstance = null
 
 const librariesById = computed(() => Object.fromEntries(libraries.value.map(l => [l.id, l])))
 
 // --- API ---
 async function fetchMembers() {
   const r = await axios.get('/members/')
-  members.value = r.data.map(m => ({
-    ...m,
-    photo_url: m.photo_url || null
-  }))
+  members.value = r.data.map(m => ({ ...m, photo_url: m.photo_url || null }))
   filterMembers()
 }
 async function fetchLibraries() { libraries.value = (await axios.get('/libraries/')).data }
@@ -252,7 +280,7 @@ function hideEditModal() {
   memberToEdit.photo_url = null
 }
 
-// --- Удаление ---
+// --- Удаление одного ---
 function onRemoveClick(m) {
   memberToDelete.id = m.id
   memberToDelete.first_name = m.first_name
@@ -272,6 +300,34 @@ function hideDeleteModal() {
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   memberToDelete.id = null
   memberToDelete.first_name = ''
+}
+
+// --- Выделение и массовое удаление ---
+function toggleSelection(id) {
+  if (selectedMembers.value.includes(id)) {
+    selectedMembers.value = selectedMembers.value.filter(x => x !== id)
+  } else {
+    selectedMembers.value.push(id)
+  }
+}
+
+function showDeleteSelectedModal() {
+  const modalEl = document.getElementById('deleteSelectedModal')
+  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteSelectedModalInstance.show()
+}
+function hideDeleteSelectedModal() {
+  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+}
+
+async function confirmDeleteSelected() {
+  if (!selectedMembers.value.length) return
+  await Promise.all(selectedMembers.value.map(id => axios.delete(`/members/${id}/`)))
+  selectedMembers.value = []
+  await fetchMembers()
+  await fetchMemberStats()
+  hideDeleteSelectedModal()
 }
 
 // --- Экспорт ---
@@ -304,5 +360,6 @@ onMounted(async () => {
 .stats-left { display:flex; gap:12px; }
 .stats-right { display:flex; gap:6px; }
 .stat { background:#fafafa; border:1px solid #ddd; padding:4px 10px; border-radius:6px; color:#333; }
-.img-thumbnail { border-radius:4px; }
+.img-thumbnail { border-radius:4px; cursor:pointer; }
+.list-group-item.selected { background-color: #d1e7dd; border-color: #0f5132; color: #0f5132; }
 </style>

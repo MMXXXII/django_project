@@ -10,10 +10,6 @@
       <p v-if="userStore.user.is_staff !== undefined">
         <strong>Администратор:</strong> {{ userStore.user.is_staff ? 'Да' : 'Нет' }}
       </p>
-      
-      
-      <!-- Убрали весь блок с подсказкой об OTP и кнопку "Обновить статус OTP" -->
-      
       <button @click="handleLogout" class="logout-btn">Выход</button>
     </div>
     
