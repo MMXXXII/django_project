@@ -2,11 +2,11 @@
   <div class="container py-4">
     <nav class="mb-4 d-flex justify-content-between align-items-center">
       <div>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/brands">Бренды</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/buyers">Покупатели</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/purchases">Покупки</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/stores">Магазины</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/clothing-types">Типы одежды</router-link>
+        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/genres">Жанры</router-link>
+        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/libraries">Библиотеки</router-link>
+        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/books">Книги</router-link>
+        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/members">Читатели</router-link>
+        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/loans">Выдачи</router-link>
       </div>
 
       <div class="d-flex align-items-center gap-2" v-if="userStore.isAuthenticated">

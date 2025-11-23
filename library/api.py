@@ -122,6 +122,16 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
         serializer.save(user=self.request.user)
 
     @action(detail=False, methods=['get'])
+    def stats(self, request):
+        stats = self.get_queryset().aggregate(
+            count=Count('id'),
+            avg=Avg('id'),
+            max=Max('id'),
+            min=Min('id')
+        )
+        return Response(stats)
+
+    @action(detail=False, methods=['get'])
     def export(self, request):
         queryset = self.get_queryset()
         data = []
@@ -134,6 +144,7 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 'User': b.user.username if b.user else ''
             })
         return self.export_queryset(data, ['ID', 'Title', 'Genre', 'Library', 'User'], 'Books')
+
 
 
 class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):

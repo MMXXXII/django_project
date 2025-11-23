@@ -6,17 +6,19 @@ from django.contrib.auth.models import User
 class BookSerializer(serializers.ModelSerializer):
     genre_name = serializers.StringRelatedField(source='genre', read_only=True)
     library_name = serializers.StringRelatedField(source='library', read_only=True)
+    cover_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
-        fields = ['id', 'title', 'genre', 'library', 'genre_name', 'library_name', 'cover', 'user']
+        fields = ['id', 'title', 'genre', 'library', 'genre_name', 'library_name', 'cover', 'cover_url', 'user']
         read_only_fields = ['user']
 
-    def create(self, validated_data):
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            validated_data['user'] = request.user
-        return super().create(validated_data)
+    def get_cover_url(self, obj):
+        if obj.cover:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.cover.url) if request else obj.cover.url
+        return None
+
 
 
 class GenreSerializer(serializers.ModelSerializer):
@@ -47,17 +49,32 @@ class LibrarySerializer(serializers.ModelSerializer):
 
 class MemberSerializer(serializers.ModelSerializer):
     library = serializers.PrimaryKeyRelatedField(queryset=Library.objects.all())
+    photo_url = serializers.SerializerMethodField()  # ссылка на изображение
 
     class Meta:
         model = Member
-        fields = ['id', 'first_name', 'library', 'user'] 
+        fields = ['id', 'first_name', 'library', 'photo', 'photo_url', 'user']
         read_only_fields = ['user']
+
+    def get_photo_url(self, obj):
+        if obj.photo:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.photo.url) if request else obj.photo.url
+        return None
 
     def create(self, validated_data):
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
             validated_data['user'] = request.user
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Обновляем изображение, если оно передано
+        photo = validated_data.pop('photo', None)
+        if photo:
+            instance.photo = photo
+        return super().update(instance, validated_data)
+
 
 
 

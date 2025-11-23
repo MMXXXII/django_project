@@ -1,6 +1,6 @@
 from django.views.generic import TemplateView
 from typing import Any
-from rest_framework.viewsets import GenericViewSet, ModelViewSet
+from rest_framework.viewsets import GenericViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -8,9 +8,9 @@ from django.contrib.auth import authenticate, login
 from django.core.cache import cache
 import time
 from rest_framework.permissions import BasePermission
-from library.models import Library, Book, Genre, Member, Loan
+from library.models import Library
 from rest_framework import serializers
-import pyotp
+from django.contrib.auth import logout as django_logout
 import random
 import string
 
@@ -96,3 +96,8 @@ class UserProfileViewSet(GenericViewSet):
     def page_with_otp_required(self, request):
         return Response({'success': True})
 
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='logout')
+    def logout(self, request):
+        django_logout(request)
+        cache.set(f'otp_good_{request.user.id}', False)
+        return Response({'success': True})

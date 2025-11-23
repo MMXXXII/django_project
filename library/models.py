@@ -45,6 +45,7 @@ class Book(models.Model):
 class Member(models.Model):
     first_name = models.TextField("Имя")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
+    photo = models.ImageField("Фото", upload_to="members", null=True, blank=True)  # новое поле
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
 
     class Meta:
@@ -53,6 +54,7 @@ class Member(models.Model):
 
     def __str__(self) -> str:
         return self.first_name
+
 
 
 
