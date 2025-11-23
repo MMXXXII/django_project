@@ -20,7 +20,6 @@
           required 
         />
       </div>
-      <!-- убрали кнопку "Войти" с this этапа - она уже есть, добавлен только submit -->
       <button type="submit" :disabled="userStore.loading">
         {{ userStore.loading ? 'Загрузка...' : 'Далее' }}
       </button>
@@ -28,10 +27,11 @@
 
     <!-- Второй этап: OTP код -->
     <form v-else @submit.prevent="handleOtpSubmit">
-      <!-- Убрали заголовок "Авторизация", упрощена информация -->
       <div class="otp-info">
         <p class="info-title">Введите код подтверждения</p>
-        <p class="info-text">Код действителен 5 минут</p>
+        <p class="info-text">
+          Осталось времени: <strong>{{ formattedOtpTime }}</strong>
+        </p>
       </div>
       
       <div class="form-group">
@@ -62,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/userStore'
 
@@ -75,12 +75,45 @@ const otpCode = ref('')
 const showOtpInput = ref(false)
 const userEmail = ref('')
 
+// Таймер OTP
+const otpTimer = ref(300) // 5 минут
+let timerInterval = null
+
+const formattedOtpTime = computed(() => {
+  const m = Math.floor(otpTimer.value / 60).toString().padStart(2, '0')
+  const s = (otpTimer.value % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+})
+
+function startOtpTimer() {
+  otpTimer.value = 300
+  timerInterval = setInterval(() => {
+    otpTimer.value--
+    if (otpTimer.value <= 0) {
+      clearInterval(timerInterval)
+      timerInterval = null
+      showOtpInput.value = false
+      otpCode.value = ''
+      userStore.error = 'Время ввода OTP истекло'
+    }
+  }, 1000)
+}
+
+function stopOtpTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval)
+    timerInterval = null
+  }
+}
+
 async function handleLogin() {
   try {
     const result = await userStore.login(username.value, password.value)
     userEmail.value = result.email
     showOtpInput.value = true
     userStore.error = null
+    stopOtpTimer()
+    startOtpTimer()
   } catch (err) {
     console.error('Ошибка при входе:', err)
   }
@@ -90,6 +123,7 @@ async function handleOtpSubmit() {
   try {
     const success = await userStore.verifyOtp(otpCode.value)
     if (success) {
+      stopOtpTimer()
       username.value = ''
       password.value = ''
       otpCode.value = ''
@@ -102,6 +136,7 @@ async function handleOtpSubmit() {
 }
 
 function handleBack() {
+  stopOtpTimer()
   showOtpInput.value = false
   otpCode.value = ''
   username.value = ''
