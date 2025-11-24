@@ -7,6 +7,8 @@ import Members from "../components/Members.vue"
 import Loans from "../components/Loans.vue"
 import Profile from "../components/Profile.vue"
 import Login from "../components/Login.vue"
+import NotFound from '../components/NotFound.vue'
+
 
 const routes = [
   { 
@@ -47,7 +49,14 @@ const routes = [
     path: "/login", 
     component: Login 
   },
+  { 
+    path: '/:pathMatch(.*)*', 
+    name: 'NotFound', 
+    component: NotFound,
+    meta: { hideHeader: true }  
+  }
 ]
+
 
 const router = createRouter({
   history: createWebHistory(),

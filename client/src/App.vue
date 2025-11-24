@@ -1,6 +1,6 @@
 <template>
   <div class="container py-4">
-    <nav class="mb-4 d-flex justify-content-between align-items-center">
+    <nav v-if="!$route.meta.hideHeader" class="mb-4 d-flex justify-content-between align-items-center">
       <div>
         <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/genres">Жанры</router-link>
         <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/libraries">Библиотеки</router-link>
