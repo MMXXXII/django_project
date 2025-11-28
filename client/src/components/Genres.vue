@@ -1,14 +1,13 @@
 <template>
   <h2>Жанры</h2>
 
-  <!-- Статистика + кнопки -->
+  <!-- Статистика -->
   <div class="stats-line">
     <div class="stats-left">
-      <div class="stat">Количество: {{ genreStats?.count || 0 }}</div>
-      <div class="stat">Среднее: {{ genreStats?.avg || 0 }}</div>
-      <div class="stat">Максимум: {{ genreStats?.max || 0 }}</div>
-      <div class="stat">Минимум: {{ genreStats?.min || 0 }}</div>
+      <div class="stat">Количество жанров: {{ genreStats?.count || 0 }}</div>
+      <div class="stat">Самый используемый: {{ genreStats?.top || "нет данных" }}</div>
     </div>
+
     <div class="stats-right">
       <button class="btn btn-success btn-sm me-2" @click="exportGenresExcel">Excel</button>
       <button class="btn btn-primary btn-sm" @click="exportGenresWord">Word</button>
@@ -17,11 +16,11 @@
 
   <!-- Поиск -->
   <div class="mb-3">
-    <input 
-      v-model="searchQuery" 
-      type="text" 
-      class="form-control" 
-      placeholder="Поиск по жанрам" 
+    <input
+      v-model="searchQuery"
+      type="text"
+      class="form-control"
+      placeholder="Поиск по жанрам"
       @input="filterGenres"
     />
   </div>
@@ -34,20 +33,20 @@
     </select>
   </div>
 
-  <!-- Форма добавления -->
-  <form class="mb-3" @submit.prevent="onAddGenre">
+  <!-- Добавление Жанра (только админ) -->
+  <form v-if="isAdmin" class="mb-3" @submit.prevent="onAddGenre">
     <div class="row g-2 align-items-center">
       <div class="col">
         <input v-model="genreToAdd.name" class="form-control" placeholder="Название жанра" required />
       </div>
       <div class="col-auto">
-        <button type="button" class="btn btn-outline-success" @click="onAddGenre">Добавить</button>
+        <button type="submit" class="btn btn-outline-success">Добавить</button>
       </div>
     </div>
   </form>
 
-  <!-- Кнопка массового удаления -->
-  <div v-if="selectedGenres.length" class="mb-3">
+  <!-- Массовое удаление (только админ) -->
+  <div v-if="isAdmin && selectedGenres.length" class="mb-3">
     <button class="btn btn-danger" @click="showDeleteSelectedModal">
       Удалить выбранные ({{ selectedGenres.length }})
     </button>
@@ -55,15 +54,17 @@
 
   <!-- Список жанров -->
   <ul class="list-group">
-    <li 
-      v-for="g in filteredGenres" 
-      :key="g.id" 
+    <li
+      v-for="g in filteredGenres"
+      :key="g.id"
       class="list-group-item d-flex justify-content-between align-items-center"
       :class="{ 'selected': selectedGenres.includes(g.id) }"
-      @click="toggleSelection(g.id)"
+      @click="isAdmin && toggleSelection(g.id)"
     >
       <div>{{ g.name }}</div>
-      <div>
+
+      <!-- Кнопки (только админ) -->
+      <div v-if="isAdmin">
         <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(g)">
           <i class="bi bi-pen-fill"></i>
         </button>
@@ -74,7 +75,7 @@
     </li>
   </ul>
 
-  <!-- Модалки редактирования и удаления -->
+  <!-- Модалка редактирования -->
   <div class="modal fade" id="editGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -93,6 +94,7 @@
     </div>
   </div>
 
+  <!-- Модалка удаления одного -->
   <div class="modal fade" id="deleteGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -120,7 +122,7 @@
           <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
         </div>
         <div class="modal-body">
-          Вы действительно хотите удалить <strong>{{ selectedGenres.length }}</strong> выбранных жанров?
+          Вы действительно хотите удалить <strong>{{ selectedGenres.length }}</strong> жанров?
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
@@ -131,172 +133,192 @@
   </div>
 </template>
 
+
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import axios from 'axios'
-import * as bootstrap from 'bootstrap'
+import { ref, reactive, computed, onMounted } from "vue";
+import axios from "axios";
+import * as bootstrap from "bootstrap";
 
-const genres = ref([])
-const filteredGenres = ref([])
-const genreStats = ref(null)
+const genres = ref([]);
+const filteredGenres = ref([]);
+const searchQuery = ref("");
+const sortOrder = ref("asc");
 
-const genreToAdd = reactive({ name: '' })
-const genreToEdit = reactive({ id: null, name: '', modalInstance: null })
-const genreToDelete = reactive({ id: null, name: '' })
-let deleteModalInstance = null
+const genreStats = ref(null);
 
-const searchQuery = ref('')
-const sortOrder = ref('asc')
-const selectedGenres = ref([])
-let deleteSelectedModalInstance = null
+const user = ref(null);
+const isAdmin = computed(() => user.value?.is_superuser);
 
-// --- Получение данных ---
+
+const genreToAdd = reactive({ name: "" });
+const genreToEdit = reactive({ id: null, name: "", modalInstance: null });
+const genreToDelete = reactive({ id: null, name: "" });
+
+let deleteModalInstance = null;
+let deleteSelectedModalInstance = null;
+
+const selectedGenres = ref([]);
+
+// --- API ---
+async function fetchUser() {
+  const r = await axios.get("/user/info/");
+  user.value = r.data;
+}
+
 async function fetchGenres() {
-  const r = await axios.get('/genres/')
-  genres.value = r.data
-  filterGenres()
+  const r = await axios.get("/genres/");
+  genres.value = r.data;
+  filterGenres();
 }
 
 async function fetchGenreStats() {
-  const r = await axios.get('/genres/stats/')
-  genreStats.value = r.data
+  const r = await axios.get("/genres/stats/");
+  genreStats.value = r.data;
 }
 
 // --- Фильтр и сортировка ---
 function filterGenres() {
-  filteredGenres.value = genres.value.filter(g =>
+  filteredGenres.value = genres.value.filter((g) =>
     g.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-  )
-  sortGenres()
+  );
+  sortGenres();
 }
 
 function sortGenres() {
-  filteredGenres.value.sort((a, b) => {
-    const A = a.name.toLowerCase()
-    const B = b.name.toLowerCase()
-    return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
-  })
+  filteredGenres.value.sort((a, b) =>
+    sortOrder.value === "asc"
+      ? a.name.localeCompare(b.name)
+      : b.name.localeCompare(a.name)
+  );
 }
 
 // --- Добавление ---
 async function onAddGenre() {
-  if (!genreToAdd.name) return
-  await axios.post('/genres/', { ...genreToAdd })
-  genreToAdd.name = ''
-  await fetchGenres()
-  await fetchGenreStats()
+  if (!genreToAdd.name || !isAdmin.value) return;
+  await axios.post("/genres/", { ...genreToAdd });
+  genreToAdd.name = "";
+  await fetchGenres();
+  await fetchGenreStats();
 }
 
 // --- Редактирование ---
 function onEditClick(g) {
-  genreToEdit.id = g.id
-  genreToEdit.name = g.name
-  const modalEl = document.getElementById('editGenreModal')
-  genreToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  genreToEdit.modalInstance.show()
+  if (!isAdmin.value) return;
+  genreToEdit.id = g.id;
+  genreToEdit.name = g.name;
+  const modal = document.getElementById("editGenreModal");
+  genreToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+  genreToEdit.modalInstance.show();
 }
 
 async function onUpdateGenre() {
-  if (!genreToEdit.id) return
-  await axios.put(`/genres/${genreToEdit.id}/`, { name: genreToEdit.name })
-  await fetchGenres()
-  await fetchGenreStats()
-  hideEditModal()
+  if (!isAdmin.value || !genreToEdit.id) return;
+  await axios.put(`/genres/${genreToEdit.id}/`, { name: genreToEdit.name });
+  hideEditModal();
+  await fetchGenres();
+  await fetchGenreStats();
 }
 
 function hideEditModal() {
-  if (genreToEdit.modalInstance) genreToEdit.modalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  genreToEdit.id = null
-  genreToEdit.name = ''
+  if (genreToEdit.modalInstance) genreToEdit.modalInstance.hide();
+  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
+  genreToEdit.id = null;
+  genreToEdit.name = "";
 }
 
 // --- Удаление одного ---
 function onRemoveClick(g) {
-  genreToDelete.id = g.id
-  genreToDelete.name = g.name
-  const modalEl = document.getElementById('deleteGenreModal')
-  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteModalInstance.show()
+  if (!isAdmin.value) return;
+  genreToDelete.id = g.id;
+  genreToDelete.name = g.name;
+  const modal = document.getElementById("deleteGenreModal");
+  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+  deleteModalInstance.show();
 }
 
 async function confirmDelete() {
-  if (!genreToDelete.id) return
-  await axios.delete(`/genres/${genreToDelete.id}/`)
-  await fetchGenres()
-  await fetchGenreStats()
-  hideDeleteModal()
+  if (!isAdmin.value || !genreToDelete.id) return;
+  await axios.delete(`/genres/${genreToDelete.id}/`);
+  hideDeleteModal();
+  await fetchGenres();
+  await fetchGenreStats();
 }
 
 function hideDeleteModal() {
-  if (deleteModalInstance) deleteModalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  genreToDelete.id = null
-  genreToDelete.name = ''
+  if (deleteModalInstance) deleteModalInstance.hide();
+  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
+  genreToDelete.id = null;
+  genreToDelete.name = "";
 }
 
 // --- Выделение ---
 function toggleSelection(id) {
+  if (!isAdmin.value) return;
   if (selectedGenres.value.includes(id)) {
-    selectedGenres.value = selectedGenres.value.filter(x => x !== id)
+    selectedGenres.value = selectedGenres.value.filter((x) => x !== id);
   } else {
-    selectedGenres.value.push(id)
+    selectedGenres.value.push(id);
   }
 }
 
-// --- Модалка массового удаления ---
+// --- Массовое удаление ---
 function showDeleteSelectedModal() {
-  const modalEl = document.getElementById('deleteSelectedModal')
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteSelectedModalInstance.show()
+  if (!isAdmin.value) return;
+  const modal = document.getElementById("deleteSelectedModal");
+  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+  deleteSelectedModalInstance.show();
 }
 
 function hideDeleteSelectedModal() {
-  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide();
+  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
 }
 
-// --- Массовое удаление ---
 async function confirmDeleteSelected() {
-  if (!selectedGenres.value.length) return
-  await Promise.all(selectedGenres.value.map(id => axios.delete(`/genres/${id}/`)))
-  selectedGenres.value = []
-  await fetchGenres()
-  await fetchGenreStats()
-  hideDeleteSelectedModal()
+  if (!isAdmin.value) return;
+  await Promise.all(
+    selectedGenres.value.map((id) => axios.delete(`/genres/${id}/`))
+  );
+  selectedGenres.value = [];
+  hideDeleteSelectedModal();
+  await fetchGenres();
+  await fetchGenreStats();
 }
 
 // --- Экспорт ---
 function exportGenresExcel() {
-  exportData('excel')
+  exportData("excel");
 }
 function exportGenresWord() {
-  exportData('word')
+  exportData("word");
 }
-function exportData(type = 'excel') {
+
+function exportData(type = "excel") {
   axios({
     url: `/genres/export/?type=${type}`,
-    method: 'GET',
-    responseType: 'blob'
-  }).then(res => {
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', type === 'excel' ? 'genres.xlsx' : 'genres.docx')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }).catch(err => {
-    console.error('Ошибка при скачивании:', err)
-    alert('Ошибка при скачивании файла')
+    method: "GET",
+    responseType: "blob",
   })
+    .then((res) => {
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", type === "excel" ? "genres.xlsx" : "genres.docx");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    })
+    .catch(() => alert("Ошибка при скачивании файла"));
 }
 
 // --- Инициализация ---
 onMounted(async () => {
-  await Promise.all([fetchGenres(), fetchGenreStats()])
-})
+  await fetchUser();
+  await fetchGenres();
+  await fetchGenreStats();
+});
 </script>
+
 
 <style scoped>
 .stats-line {

@@ -1,14 +1,12 @@
 <template>
   <div>
     <h2>Читатели</h2>
-
     <!-- Статистика + кнопки -->
     <div class="stats-line">
       <div class="stats-left">
-        <div class="stat">Количество: {{ memberStats?.count || 0 }}</div>
-        <div class="stat">Среднее: {{ memberStats?.avg || 0 }}</div>
-        <div class="stat">Максимум: {{ memberStats?.max || 0 }}</div>
-        <div class="stat">Минимум: {{ memberStats?.min || 0 }}</div>
+        <div class="stat">Читателей: {{ memberStats?.count || 0 }}</div>
+        <div class="stat">Средний возраст: {{ memberStats?.avg_age || 0 }} лет</div>
+        <div class="stat">Среднее книг: {{ memberStats?.avg_books || 0 }}</div>
       </div>
       <div class="stats-right">
         <button class="btn btn-success btn-sm me-2" @click="exportMembersExcel">Excel</button>
@@ -18,73 +16,33 @@
 
     <!-- Поиск -->
     <div class="mb-3">
-      <input 
-        v-model="searchQuery" 
-        type="text" 
-        class="form-control" 
-        placeholder="Поиск по читателям" 
-        @input="filterMembers"
-      />
+      <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по читателям"
+        @input="filterMembers" />
     </div>
 
-    <!-- Сортировка -->
-    <div class="mb-3">
-      <select v-model="sortOrder" @change="sortMembers" class="form-select">
+    <!-- Сортировка + Кнопка Добавить -->
+    <div class="mb-3 d-flex gap-3 align-items-stretch">
+      <select v-model="sortOrder" @change="sortMembers" class="form-select flex-grow-1">
         <option value="asc">От A до Я</option>
         <option value="desc">От Я до A</option>
+        <option value="admin_first">Администратор → Пользователь</option>
+        <option value="user_first">Пользователь → Администратор</option>
       </select>
-    </div>
-
-    <!-- Форма добавления -->
-    <form class="mb-3" @submit.prevent="onAddMember">
-      <div class="row g-2 align-items-center">
-        <div class="col">
-          <input v-model="memberToAdd.first_name" class="form-control" placeholder="Имя" required />
-        </div>
-        <div class="col" v-if="libraries.length">
-          <select v-model="memberToAdd.library" class="form-select" required>
-            <option value="" disabled>Выберите библиотеку</option>
-            <option v-for="l in libraries" :key="l.id" :value="l.id">{{ l.name }}</option>
-          </select>
-        </div>
-        <div class="col">
-          <input type="file" @change="onFileChange($event, memberToAdd)" class="form-control" />
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-outline-success">Добавить</button>
-        </div>
-      </div>
-    </form>
-
-    <!-- Кнопка массового удаления -->
-    <div v-if="selectedMembers.length" class="mb-3">
-      <button class="btn btn-danger" @click="showDeleteSelectedModal">
-        Удалить выбранных ({{ selectedMembers.length }})
-      </button>
+      <button class="btn btn-outline-success" @click="showAddModal" style="white-space: nowrap;">Добавить читателя</button>
     </div>
 
     <!-- Список читателей -->
     <ul class="list-group">
-      <li 
-        v-for="m in filteredMembers" 
-        :key="m.id" 
+      <li v-for="m in filteredMembers" :key="m.id"
         class="list-group-item d-flex justify-content-between align-items-center"
-        :class="{ 'selected': selectedMembers.includes(m.id) }"
-        @click="toggleSelection(m.id)"
-      >
-        <div class="d-flex align-items-center gap-2">
-          <img 
-            v-if="m.photo_url" 
-            :src="m.photo_url" 
-            alt="Фото" 
-            class="img-thumbnail" 
-            style="height:50px; cursor:pointer;" 
-            @click.stop="showPhotoModal(m.photo_url)" 
-          />
-          <div>
-            <strong>{{ m.first_name }}</strong>
-            <div class="text-muted small">{{ librariesById[m.library]?.name || 'Нет библиотеки' }}</div>
+        :class="{ 'selected': selectedMembers.includes(m.id) }" @click="toggleSelection(m.id)">
+        <div>
+          <div class="d-flex align-items-center gap-2">
+            <strong>{{ m.username || m.first_name }}</strong>
+            <span v-if="m.is_superuser" class="badge bg-danger">Администратор</span>
+            <span v-else class="badge bg-secondary">Пользователь</span>
           </div>
+          <div class="small text-muted">{{ m.email }}</div>
         </div>
         <div>
           <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(m)">
@@ -98,21 +56,72 @@
     </ul>
 
     <!-- Модалки -->
-    <div class="modal fade" id="editMemberModal" tabindex="-1">
+    <!-- Модалка добавления нового пользователя -->
+    <div class="modal fade" id="addMemberModal" tabindex="-1" aria-labelledby="addMemberModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Редактирование читателя</h5>
+            <h5 class="modal-title" id="addMemberModalLabel">Добавление нового читателя</h5>
+            <button type="button" class="btn-close" @click="hideAddModal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="addUsername" class="form-label">Имя пользователя</label>
+              <input v-model="memberToAdd.username" class="form-control" id="addUsername" placeholder="Имя пользователя" />
+            </div>
+            <div class="mb-3">
+              <label for="addEmail" class="form-label">Электронная почта</label>
+              <input v-model="memberToAdd.email" class="form-control" id="addEmail" placeholder="Электронная почта" />
+            </div>
+            <div class="mb-3">
+              <label for="addAge" class="form-label">Возраст</label>
+              <input type="number" v-model="memberToAdd.age" class="form-control" id="addAge" placeholder="Возраст" />
+            </div>
+            <div class="mb-3">
+              <label for="addPassword" class="form-label">Пароль</label>
+              <input type="password" v-model="memberToAdd.password" class="form-control" id="addPassword" placeholder="Пароль" />
+            </div>
+            <div class="mb-3">
+              <label for="addIsSuperUser" class="form-check-label">Администратор</label>
+              <input type="checkbox" v-model="memberToAdd.is_superuser" class="form-check-input" id="addIsSuperUser" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="hideAddModal">Отмена</button>
+            <button type="button" class="btn btn-success" @click="onAddMember">Добавить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модалка редактирования -->
+    <div class="modal fade" id="editMemberModal" tabindex="-1" aria-labelledby="editMemberModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editMemberModalLabel">Редактирование читателя</h5>
             <button type="button" class="btn-close" @click="hideEditModal"></button>
           </div>
           <div class="modal-body">
-            <input v-model="memberToEdit.first_name" class="form-control mb-2" placeholder="Имя" />
-            <select v-model="memberToEdit.library" class="form-select mb-2" v-if="libraries.length">
-              <option v-for="l in libraries" :key="l.id" :value="l.id">{{ l.name }}</option>
-            </select>
-            <input type="file" @change="onFileChange($event, memberToEdit)" class="form-control mb-2" />
-            <div v-if="memberToEdit.photo_url" class="mt-2">
-              <img :src="memberToEdit.photo_url" alt="Фото" class="img-thumbnail" style="height:100px; cursor:pointer;" @click="showPhotoModal(memberToEdit.photo_url)" />
+            <div class="mb-3">
+              <label for="username" class="form-label">Имя пользователя</label>
+              <input v-model="memberToEdit.username" class="form-control" id="username" placeholder="Имя пользователя" />
+            </div>
+            <div class="mb-3">
+              <label for="email" class="form-label">Электронная почта</label>
+              <input v-model="memberToEdit.email" class="form-control" id="email" placeholder="Электронная почта" />
+            </div>
+            <div class="mb-3">
+              <label for="age" class="form-label">Возраст</label>
+              <input type="number" v-model="memberToEdit.age" class="form-control" id="age" placeholder="Возраст" />
+            </div>
+            <div class="mb-3">
+              <label for="password" class="form-label">Новый пароль</label>
+              <input type="password" v-model="memberToEdit.password" class="form-control" id="password" placeholder="Новый пароль" />
+            </div>
+            <div class="mb-3">
+              <label for="isSuperUser" class="form-check-label">Администратор</label>
+              <input type="checkbox" v-model="memberToEdit.is_superuser" class="form-check-input" id="isSuperUser" />
             </div>
           </div>
           <div class="modal-footer">
@@ -123,15 +132,16 @@
       </div>
     </div>
 
-    <div class="modal fade" id="deleteMemberModal" tabindex="-1">
+    <!-- Модалка удаления -->
+    <div class="modal fade" id="deleteMemberModal" tabindex="-1" aria-labelledby="deleteMemberModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Удаление читателя</h5>
+            <h5 class="modal-title" id="deleteMemberModalLabel">Удаление читателя</h5>
             <button type="button" class="btn-close" @click="hideDeleteModal"></button>
           </div>
           <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ memberToDelete.first_name }}</strong>?
+            Вы действительно хотите удалить <strong>{{ memberToDelete.username }}</strong>?
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
@@ -140,226 +150,324 @@
         </div>
       </div>
     </div>
-
-    <!-- Модалка массового удаления -->
-    <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление выбранных читателей</h5>
-            <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ selectedMembers.length }}</strong> выбранных читателей?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="photoModal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-body text-center">
-            <img :src="photoModalUrl" alt="Фото читателя" class="img-fluid" />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 
 const members = ref([])
 const filteredMembers = ref([])
 const memberStats = ref([])
-const libraries = ref([])
-
-const memberToAdd = reactive({ first_name: '', library: null, photoFile: null })
-const memberToEdit = reactive({ id: null, first_name: '', library: null, photoFile: null, photo_url: null, modalInstance: null })
-const memberToDelete = reactive({ id: null, first_name: '' })
-
-const selectedMembers = ref([])
 const searchQuery = ref('')
 const sortOrder = ref('asc')
-const photoModalUrl = ref(null)
-let photoModalInstance = null
-let deleteModalInstance = null
-let deleteSelectedModalInstance = null
+const selectedMembers = ref([])
+const memberToAdd = reactive({ username: '', email: '', password: '', age: null, is_superuser: false, is_staff: false })
+const memberToEdit = reactive({
+  id: null,
+  username: '',
+  email: '',
+  password: '',
+  age: null,
+  is_superuser: false,
+  is_staff: false,
+})
+const memberToDelete = reactive({ id: null, username: '' })
 
-const librariesById = computed(() => Object.fromEntries(libraries.value.map(l => [l.id, l])))
+onMounted(() => {
+  searchQuery.value = '';
+  fetchMembers();
+  fetchMemberStats();
+})
 
-// --- API ---
 async function fetchMembers() {
-  const r = await axios.get('/members/')
-  members.value = r.data.map(m => ({ ...m, photo_url: m.photo_url || null }))
-  filterMembers()
+  try {
+    const response = await axios.get('/members/');
+    members.value = response.data;
+    filterMembers();
+  } catch (error) {
+    console.error('Error fetching members:', error);
+  }
 }
-async function fetchLibraries() { libraries.value = (await axios.get('/libraries/')).data }
-async function fetchMemberStats() { memberStats.value = (await axios.get('/members/stats/')).data }
 
-// --- Фильтр / сортировка ---
 function filterMembers() {
-  filteredMembers.value = members.value.filter(m => m.first_name.toLowerCase().includes(searchQuery.value.toLowerCase()))
-  sortMembers()
+  filteredMembers.value = members.value.filter(m => m.username.toLowerCase().includes(searchQuery.value.toLowerCase()));
+  sortMembers();
 }
+
 function sortMembers() {
   filteredMembers.value.sort((a, b) => {
-    const A = a.first_name.toLowerCase()
-    const B = b.first_name.toLowerCase()
-    return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
-  })
-}
-
-// --- Файлы ---
-function onFileChange(e, memberObj) {
-  const file = e.target.files[0]
-  if (file) memberObj.photoFile = file
-}
-function showPhotoModal(url) {
-  photoModalUrl.value = url
-  if (!photoModalInstance) {
-    const modalEl = document.getElementById('photoModal')
-    photoModalInstance = new bootstrap.Modal(modalEl)
-  }
-  photoModalInstance.show()
-}
-
-// --- CRUD ---
-async function onAddMember() {
-  const formData = new FormData()
-  formData.append('first_name', memberToAdd.first_name)
-  formData.append('library', memberToAdd.library)
-  if (memberToAdd.photoFile) formData.append('photo', memberToAdd.photoFile)
-  await axios.post('/members/', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-  memberToAdd.first_name = ''
-  memberToAdd.library = null
-  memberToAdd.photoFile = null
-  await fetchMembers()
-  await fetchMemberStats()
+    if (sortOrder.value === 'admin_first') {
+      // Сначала администраторы, потом пользователи
+      if (a.is_superuser && !b.is_superuser) return -1;
+      if (!a.is_superuser && b.is_superuser) return 1;
+      // Если роли одинаковые, сортируем по имени
+      return a.username.toLowerCase().localeCompare(b.username.toLowerCase());
+    } else if (sortOrder.value === 'user_first') {
+      // Сначала пользователи, потом администраторы
+      if (!a.is_superuser && b.is_superuser) return -1;
+      if (a.is_superuser && !b.is_superuser) return 1;
+      // Если роли одинаковые, сортируем по имени
+      return a.username.toLowerCase().localeCompare(b.username.toLowerCase());
+    } else {
+      // Обычная сортировка по алфавиту
+      const A = a.username.toLowerCase();
+      const B = b.username.toLowerCase();
+      return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A);
+    }
+  });
 }
 
 function onEditClick(m) {
-  memberToEdit.id = m.id
-  memberToEdit.first_name = m.first_name
-  memberToEdit.library = m.library
-  memberToEdit.photo_url = m.photo_url
-  memberToEdit.photoFile = null
-  const modalEl = document.getElementById('editMemberModal')
-  memberToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  memberToEdit.modalInstance.show()
+  memberToEdit.id = m.id;
+  memberToEdit.username = m.username;
+  memberToEdit.email = m.email;
+  memberToEdit.age = m.age || null;
+  memberToEdit.is_superuser = m.is_superuser;
+  memberToEdit.is_staff = m.is_staff;
+  const modalEl = document.getElementById('editMemberModal');
+  const modalInstance = new bootstrap.Modal(modalEl);
+  modalInstance.show();
 }
+
 async function onUpdateMember() {
-  const formData = new FormData()
-  formData.append('first_name', memberToEdit.first_name)
-  formData.append('library', memberToEdit.library)
-  if (memberToEdit.photoFile) formData.append('photo', memberToEdit.photoFile)
-  await axios.put(`/members/${memberToEdit.id}/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-  hideEditModal()
-  await fetchMembers()
-  await fetchMemberStats()
-}
-function hideEditModal() {
-  if (memberToEdit.modalInstance) memberToEdit.modalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  memberToEdit.id = null
-  memberToEdit.first_name = ''
-  memberToEdit.library = null
-  memberToEdit.photoFile = null
-  memberToEdit.photo_url = null
-}
+  try {
+    const formData = new FormData();
+    formData.append('username', memberToEdit.username);
+    formData.append('email', memberToEdit.email);
+    if (memberToEdit.age) formData.append('age', memberToEdit.age);
+    if (memberToEdit.password) formData.append('password', memberToEdit.password);
+    formData.append('is_superuser', memberToEdit.is_superuser);
+    formData.append('is_staff', memberToEdit.is_staff);
 
-// --- Удаление одного ---
-function onRemoveClick(m) {
-  memberToDelete.id = m.id
-  memberToDelete.first_name = m.first_name
-  const modalEl = document.getElementById('deleteMemberModal')
-  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteModalInstance.show()
-}
-async function confirmDelete() {
-  if (!memberToDelete.id) return
-  await axios.delete(`/members/${memberToDelete.id}/`)
-  hideDeleteModal()
-  await fetchMembers()
-  await fetchMemberStats()
-}
-function hideDeleteModal() {
-  if (deleteModalInstance) deleteModalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  memberToDelete.id = null
-  memberToDelete.first_name = ''
-}
-
-// --- Выделение и массовое удаление ---
-function toggleSelection(id) {
-  if (selectedMembers.value.includes(id)) {
-    selectedMembers.value = selectedMembers.value.filter(x => x !== id)
-  } else {
-    selectedMembers.value.push(id)
+    await axios.put(`/members/${memberToEdit.id}/`, formData);
+    await fetchMembers();
+    await fetchMemberStats();
+    hideEditModal();
+  } catch (error) {
+    console.error('Error updating member:', error);
   }
 }
 
-function showDeleteSelectedModal() {
-  const modalEl = document.getElementById('deleteSelectedModal')
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteSelectedModalInstance.show()
+function showAddModal() {
+  memberToAdd.username = '';
+  memberToAdd.email = '';
+  memberToAdd.password = '';
+  memberToAdd.age = null;
+  memberToAdd.is_superuser = false;
+  memberToAdd.is_staff = false;
+  
+  const modalEl = document.getElementById('addMemberModal');
+  const modalInstance = new bootstrap.Modal(modalEl);
+  modalInstance.show();
 }
-function hideDeleteSelectedModal() {
-  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+
+async function onAddMember() {
+  try {
+    const formData = new FormData();
+    formData.append('username', memberToAdd.username);
+    formData.append('email', memberToAdd.email);
+    formData.append('password', memberToAdd.password);
+    if (memberToAdd.age) formData.append('age', memberToAdd.age);
+    formData.append('is_superuser', memberToAdd.is_superuser);
+    formData.append('is_staff', memberToAdd.is_staff);
+
+    const response = await axios.post('/members/', formData);
+    console.log('Success:', response.data);
+    await fetchMembers();
+    await fetchMemberStats();
+    hideAddModal();
+  } catch (error) {
+    console.error('Error adding member:', error);
+    console.error('Error response:', error.response?.data);
+    console.error('Error status:', error.response?.status);
+    
+    // Показываем понятное сообщение пользователю
+    if (error.response?.data?.error) {
+      alert(`Ошибка: ${error.response.data.error}`);
+    } else if (error.response?.data) {
+      alert(`Ошибка: ${JSON.stringify(error.response.data)}`);
+    } else {
+      alert('Ошибка при добавлении пользователя');
+    }
+  }
+}
+
+function onRemoveClick(m) {
+  memberToDelete.id = m.id;
+  memberToDelete.username = m.username;
+  const modalEl = document.getElementById('deleteMemberModal');
+  const modalInstance = new bootstrap.Modal(modalEl);
+  modalInstance.show();
+}
+
+async function confirmDelete() {
+  if (!memberToDelete.id) return;
+  try {
+    await axios.delete(`/members/${memberToDelete.id}/`);
+    await fetchMembers();
+    hideDeleteModal();
+  } catch (error) {
+    console.error('Error deleting member:', error);
+  }
+}
+
+function toggleSelection(id) {
+  if (selectedMembers.value.includes(id)) {
+    selectedMembers.value = selectedMembers.value.filter(x => x !== id);
+  } else {
+    selectedMembers.value.push(id);
+  }
 }
 
 async function confirmDeleteSelected() {
-  if (!selectedMembers.value.length) return
-  await Promise.all(selectedMembers.value.map(id => axios.delete(`/members/${id}/`)))
-  selectedMembers.value = []
-  await fetchMembers()
-  await fetchMemberStats()
-  hideDeleteSelectedModal()
+  if (!selectedMembers.value.length) return;
+  await Promise.all(selectedMembers.value.map(id => axios.delete(`/members/${id}/`)));
+  selectedMembers.value = [];
+  await fetchMembers();
 }
 
-// --- Экспорт ---
-function exportMembersExcel() { exportData('excel') }
-function exportMembersWord() { exportData('word') }
-function exportData(type) {
-  axios({ url: `/members/export/?type=${type}`, method: 'GET', responseType: 'blob' })
-    .then(res => {
-      const url = window.URL.createObjectURL(new Blob([res.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', type === 'excel' ? 'members.xlsx' : 'members.docx')
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    })
-    .catch(err => { console.error(err); alert('Ошибка при скачивании файла') })
+async function fetchMemberStats() {
+  try {
+    const response = await axios.get('/members/stats/');
+    memberStats.value = response.data;
+    console.log('Stats loaded:', response.data);
+  } catch (error) {
+    console.error('Error fetching member stats:', error);
+    console.error('Error response:', error.response?.data);
+    // Устанавливаем значения по умолчанию при ошибке
+    memberStats.value = {
+      count: 0,
+      avg_age: 0,
+      avg_books: 0
+    };
+  }
 }
 
-// --- Инициализация ---
-onMounted(async () => {
-  await fetchLibraries()
-  await fetchMembers()
-  await fetchMemberStats()
-})
+async function exportMembersExcel() {
+  try {
+    const response = await axios.get('/members/export/excel/', { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'members.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    console.error('Error exporting to Excel:', error);
+  }
+}
+
+async function exportMembersWord() {
+  try {
+    const response = await axios.get('/members/export/word/', { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'members.docx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    console.error('Error exporting to Word:', error);
+  }
+}
+
+function hideAddModal() {
+  const modalEl = document.getElementById('addMemberModal');
+  const modalInstance = bootstrap.Modal.getInstance(modalEl);
+  if (modalInstance) {
+    modalInstance.hide();
+  }
+  // Убираем фокус с элементов внутри модального окна
+  document.activeElement?.blur();
+  // Очищаем backdrop
+  setTimeout(() => {
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+  }, 200);
+}
+
+function hideEditModal() {
+  const modalEl = document.getElementById('editMemberModal');
+  const modalInstance = bootstrap.Modal.getInstance(modalEl);
+  if (modalInstance) {
+    modalInstance.hide();
+  }
+  // Убираем фокус с элементов внутри модального окна
+  document.activeElement?.blur();
+  // Очищаем backdrop
+  setTimeout(() => {
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+  }, 200);
+}
+
+function hideDeleteModal() {
+  const modalEl = document.getElementById('deleteMemberModal');
+  const modalInstance = bootstrap.Modal.getInstance(modalEl);
+  if (modalInstance) {
+    modalInstance.hide();
+  }
+  // Убираем фокус с элементов внутри модального окна
+  document.activeElement?.blur();
+  // Очищаем backdrop
+  setTimeout(() => {
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+  }, 200);
+}
 </script>
 
 <style scoped>
-.stats-line { display:flex; justify-content:space-between; gap:12px; margin-bottom:14px; font-size:0.9em; }
-.stats-left { display:flex; gap:12px; }
-.stats-right { display:flex; gap:6px; }
-.stat { background:#fafafa; border:1px solid #ddd; padding:4px 10px; border-radius:6px; color:#333; }
-.img-thumbnail { border-radius:4px; cursor:pointer; }
-.list-group-item.selected { background-color: #d1e7dd; border-color: #0f5132; color: #0f5132; }
+.stats-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+
+.stats-left {
+  display: flex;
+  gap: 12px;
+}
+
+.stats-right {
+  display: flex;
+  gap: 6px;
+}
+
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+
+.img-thumbnail {
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.list-group-item.selected {
+  background-color: #d1e7dd;
+  border-color: #0f5132;
+  color: #0f5132;
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px;
+}
 </style>

@@ -20,9 +20,9 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from rest_framework.routers import DefaultRouter
-from library.api import LibraryViewSet, BookViewSet, GenreViewSet, MemberViewSet, LoanViewSet
+# Измените эту строку:
+from library.api import LibraryViewSet, BookViewSet, GenreViewSet, LoanViewSet, MemberViewSet
 from library.views import UserProfileViewSet
-
 
 from library import views
 
@@ -30,16 +30,17 @@ router = DefaultRouter()
 router.register("libraries", LibraryViewSet, basename="library")
 router.register("books", BookViewSet, basename="book")
 router.register("genres", GenreViewSet, basename="genre")
-router.register("members", MemberViewSet, basename="member")
+router.register("members", MemberViewSet, basename="member") 
 router.register("loans", LoanViewSet, basename="loan")
 router.register("userprofile", UserProfileViewSet, basename="userprofile")
+router.register('user', UserProfileViewSet, basename='user')
+
 
 urlpatterns = [
     path('', views.ShowLibraryView.as_view()),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/', include('rest_framework.urls'))
-
 ]
 
 if settings.DEBUG:

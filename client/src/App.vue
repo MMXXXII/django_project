@@ -5,7 +5,8 @@
         <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/genres">Жанры</router-link>
         <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/libraries">Библиотеки</router-link>
         <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/books">Книги</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/members">Читатели</router-link>
+        <!-- Добавляем проверку, чтобы только суперпользователь видел ссылку на читателей -->
+        <router-link v-if="userStore.isAuthenticated && userStore.isSuperUser" class="btn btn-light me-2" to="/members">Читатели</router-link>
         <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/loans">Выдачи</router-link>
       </div>
 
@@ -28,6 +29,8 @@
     <router-view/>
   </div>
 </template>
+
+
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'

@@ -10,18 +10,26 @@
       <div class="stat">Минимум: {{ loanStats?.min || 0 }}</div>
     </div>
     <div class="stats-right">
-      <button class="btn btn-success btn-sm me-2" @click="exportLoansExcel">Excel</button>
-      <button class="btn btn-primary btn-sm" @click="exportLoansWord">Word</button>
+      <button class="btn btn-success btn-sm me-2" @click="exportLoans('excel')">Excel</button>
+      <button class="btn btn-primary btn-sm" @click="exportLoans('word')">Word</button>
     </div>
+  </div>
+
+  <!-- Фильтр по библиотеке -->
+  <div class="mb-3">
+    <select v-model="selectedLibrary" @change="filterLoans" class="form-select">
+      <option value="">Все библиотеки</option>
+      <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
+    </select>
   </div>
 
   <!-- Поиск -->
   <div class="mb-3">
-    <input 
-      v-model="searchQuery" 
-      type="text" 
-      class="form-control" 
-      placeholder="Поиск по книгам или читателям" 
+    <input
+      v-model="searchQuery"
+      type="text"
+      class="form-control"
+      placeholder="Поиск по книгам или читателям"
       @input="filterLoans"
     />
   </div>
@@ -34,70 +42,89 @@
     </select>
   </div>
 
-  <!-- Форма добавления -->
+  <!-- Форма добавления выдачи -->
   <form class="mb-3" @submit.prevent="onAddLoan">
     <div class="row g-2 align-items-center">
+
+      <!-- Выбор библиотеки -->
+      <div class="col">
+        <select v-model="loanToAdd.library" @change="onLibraryChange" class="form-select" required>
+          <option value="" disabled>Выберите библиотеку</option>
+          <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
+        </select>
+      </div>
+
+      <!-- Выбор книги -->
       <div class="col">
         <select v-model="loanToAdd.book" class="form-select" required>
-          <option v-for="b in books" :key="b.id" :value="b.id">{{ b.title }}</option>
+          <option value="" disabled>Выберите книгу</option>
+          <option v-for="b in availableBooks" :key="b.id" :value="b.id">{{ b.title }}</option>
         </select>
       </div>
-      <div class="col">
-        <select v-model="loanToAdd.member" class="form-select" required>
-          <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }}</option>
-        </select>
-      </div>
+
+      <!-- Дата выдачи -->
       <div class="col-auto">
         <input type="date" v-model="loanToAdd.loan_date" class="form-control" required />
       </div>
+
+      <!-- Кнопка добавить -->
       <div class="col-auto">
-        <button type="button" class="btn btn-outline-success" @click="onAddLoan">Добавить</button>
+        <button type="submit" class="btn btn-outline-success">Добавить</button>
       </div>
+
     </div>
   </form>
 
-  <!-- Кнопка массового удаления -->
-  <div v-if="selectedLoans.length" class="mb-3">
-    <button class="btn btn-danger" @click="showDeleteSelectedModal">
-      Удалить выбранные ({{ selectedLoans.length }})
-    </button>
-  </div>
-
   <!-- Список выдач -->
-  <ul class="list-group">
-    <li 
-      v-for="l in filteredLoans" 
-      :key="l.id" 
+  <ul class="list-group mb-3">
+    <li
+      v-for="l in filteredLoans"
+      :key="l.id"
       class="list-group-item d-flex justify-content-between align-items-center"
       :class="{ 'selected': selectedLoans.includes(l.id) }"
       @click="toggleSelection(l.id)"
     >
       <div>
-        <div><strong>{{ booksById[l.book]?.title }}</strong> → {{ membersById[l.member]?.first_name }}</div>
+        <div>
+          <strong>{{ booksById[l.book]?.title }}</strong> →
+          {{ isAdmin ? membersById[l.member]?.first_name : currentUser.first_name }}
+        </div>
         <div class="small text-muted">{{ l.loan_date }}</div>
       </div>
       <div>
-        <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(l)">
+        <button v-if="isAdmin" class="btn btn-sm btn-success me-2" @click.stop="onEditClick(l)">
           <i class="bi bi-pen-fill"></i>
         </button>
-        <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
+        <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
           <i class="bi bi-x"></i>
         </button>
       </div>
     </li>
   </ul>
 
-  <!-- Модалки редактирования и удаления одного -->
+  <!-- Массовое удаление для админа -->
+  <div v-if="selectedLoans.length && isAdmin" class="mb-3">
+    <button class="btn btn-danger" @click="showDeleteSelectedModal">
+      Удалить выбранные ({{ selectedLoans.length }})
+    </button>
+  </div>
+
+  <!-- Модалки редактирования и удаления -->
   <div class="modal fade" id="editLoanModal" tabindex="-1">
     <div class="modal-dialog">
-      <div class="modal-content">
+      <div class="modal-content" v-if="isAdmin">
         <div class="modal-header">
           <h5 class="modal-title">Редактирование выдачи</h5>
           <button type="button" class="btn-close" @click="hideEditModal"></button>
         </div>
         <div class="modal-body">
+          <select v-model="loanToEdit.library" @change="onEditLibraryChange" class="form-select mb-2">
+            <option value="" disabled>Выберите библиотеку</option>
+            <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
+          </select>
           <select v-model="loanToEdit.book" class="form-select mb-2">
-            <option v-for="b in books" :key="b.id" :value="b.id">{{ b.title }}</option>
+            <option value="" disabled>Выберите книгу</option>
+            <option v-for="b in availableEditBooks" :key="b.id" :value="b.id">{{ b.title }}</option>
           </select>
           <select v-model="loanToEdit.member" class="form-select mb-2">
             <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }}</option>
@@ -114,7 +141,7 @@
 
   <div class="modal fade" id="deleteLoanModal" tabindex="-1">
     <div class="modal-dialog">
-      <div class="modal-content">
+      <div class="modal-content" v-if="isAdmin">
         <div class="modal-header">
           <h5 class="modal-title">Удаление выдачи</h5>
           <button type="button" class="btn-close" @click="hideDeleteModal"></button>
@@ -130,10 +157,9 @@
     </div>
   </div>
 
-  <!-- Модалка массового удаления -->
   <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
     <div class="modal-dialog">
-      <div class="modal-content">
+      <div class="modal-content" v-if="isAdmin">
         <div class="modal-header">
           <h5 class="modal-title">Удаление выбранных выдач</h5>
           <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
@@ -151,18 +177,26 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 
-const loans = ref([])
-const filteredLoans = ref([])
+// --- Данные пользователя ---
+const currentUser = reactive({ id: 0, first_name: '', role: 'user' })
+const isAdmin = computed(() => currentUser.role === 'admin')
+
+// --- Основные данные ---
+const libraries = ref([])
+const selectedLibrary = ref('')
 const books = ref([])
 const members = ref([])
+const loans = ref([])
+const filteredLoans = ref([])
 const loanStats = ref(null)
 
-const loanToAdd = reactive({ book: null, member: null, loan_date: '' })
-const loanToEdit = reactive({ id: null, book: null, member: null, loan_date: '', modalInstance: null })
+// --- Для добавления и редактирования ---
+const loanToAdd = reactive({ library: null, book: null, loan_date: '' })
+const loanToEdit = reactive({ id: null, library: null, book: null, member: null, loan_date: '', modalInstance: null })
 const loanToDelete = reactive({ id: null, book: null, member: null, loan_date: '' })
 const selectedLoans = ref([])
 
@@ -172,31 +206,47 @@ let deleteSelectedModalInstance = null
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
+// --- Быстрый доступ по id ---
 const booksById = computed(() => Object.fromEntries(books.value.map(b => [b.id, b])))
 const membersById = computed(() => Object.fromEntries(members.value.map(m => [m.id, m])))
+const loanToDeleteDisplay = computed(() => `${booksById[loanToDelete.book]?.title || ''} → ${membersById[loanToDelete.member]?.first_name || ''}`)
 
-const loanToDeleteDisplay = computed(() => {
-  return `${booksById.value[loanToDelete.book]?.title || ''} → ${membersById.value[loanToDelete.member]?.first_name || ''}`
-})
+// --- Книги фильтруются по выбранной библиотеке ---
+const availableBooks = computed(() =>
+  books.value.filter(b => !loanToAdd.library || b.library === Number(loanToAdd.library))
+)
 
-// --- Получение данных ---
-async function fetchLoans() {
-  const r = await axios.get('/loans/')
-  loans.value = r.data
-  filterLoans()
+const availableEditBooks = computed(() =>
+  books.value.filter(b => !loanToEdit.library || b.library === Number(loanToEdit.library))
+)
+
+
+
+// --- API запросы ---
+async function fetchProfile() {
+  const r = await axios.get('/userprofile/') 
+  Object.assign(currentUser, r.data)
 }
+async function fetchLibraries() { libraries.value = (await axios.get('/libraries/')).data }
 async function fetchBooks() { books.value = (await axios.get('/books/')).data }
 async function fetchMembers() { members.value = (await axios.get('/members/')).data }
+async function fetchLoans() {
+  const r = await axios.get('/loans/')
+  loans.value = isAdmin.value ? r.data : r.data.filter(l => l.member.id === currentUser.id)
+  filterLoans()
+}
 async function fetchLoanStats() { loanStats.value = (await axios.get('/loans/stats/')).data }
 
-watch([loans, books, members], filterLoans, { deep: true })
+// --- Фильтрация и сортировка ---
+watch([loans, books, members, selectedLibrary], filterLoans, { deep: true })
 
 function filterLoans() {
   const query = searchQuery.value.toLowerCase()
   filteredLoans.value = loans.value.filter(l => {
     const bookTitle = booksById.value[l.book]?.title?.toLowerCase() || ''
     const memberName = membersById.value[l.member]?.first_name?.toLowerCase() || ''
-    return bookTitle.includes(query) || memberName.includes(query)
+    const libraryMatch = selectedLibrary.value ? booksById.value[l.book]?.library === Number(selectedLibrary.value) : true
+    return (bookTitle.includes(query) || memberName.includes(query)) && libraryMatch
   })
   sortLoans()
 }
@@ -210,19 +260,32 @@ function sortLoans() {
 }
 
 // --- Добавление ---
+function onLibraryChange() { loanToAdd.book = null }
+
 async function onAddLoan() {
-  if (!loanToAdd.book || !loanToAdd.member || !loanToAdd.loan_date) return
-  await axios.post('/loans/', { ...loanToAdd })
+  if (!loanToAdd.book || !loanToAdd.loan_date) return
+
+  const data = {
+    book: loanToAdd.book,
+    member: currentUser.id,
+    loan_date: loanToAdd.loan_date
+  }
+
+  await axios.post('/loans/', data)
+
+  loanToAdd.library = null
   loanToAdd.book = null
-  loanToAdd.member = null
   loanToAdd.loan_date = ''
+
   await fetchLoans()
   await fetchLoanStats()
 }
 
 // --- Редактирование ---
 function onEditClick(l) {
+  if (!isAdmin.value) return
   loanToEdit.id = l.id
+  loanToEdit.library = booksById[l.book]?.library.id || null
   loanToEdit.book = l.book
   loanToEdit.member = l.member
   loanToEdit.loan_date = l.loan_date
@@ -230,9 +293,10 @@ function onEditClick(l) {
   loanToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   loanToEdit.modalInstance.show()
 }
+function onEditLibraryChange() { loanToEdit.book = null }
 
 async function onUpdateLoan() {
-  if (!loanToEdit.id) return
+  if (!loanToEdit.id || !isAdmin.value) return
   await axios.put(`/loans/${loanToEdit.id}/`, {
     book: loanToEdit.book,
     member: loanToEdit.member,
@@ -247,13 +311,15 @@ function hideEditModal() {
   if (loanToEdit.modalInstance) loanToEdit.modalInstance.hide()
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   loanToEdit.id = null
+  loanToEdit.library = null
   loanToEdit.book = null
   loanToEdit.member = null
   loanToEdit.loan_date = ''
 }
 
-// --- Удаление одного ---
+// --- Удаление ---
 function onRemoveClick(l) {
+  if (!isAdmin.value) return
   loanToDelete.id = l.id
   loanToDelete.book = l.book
   loanToDelete.member = l.member
@@ -264,7 +330,7 @@ function onRemoveClick(l) {
 }
 
 async function confirmDelete() {
-  if (!loanToDelete.id) return
+  if (!loanToDelete.id || !isAdmin.value) return
   await axios.delete(`/loans/${loanToDelete.id}/`)
   await fetchLoans()
   await fetchLoanStats()
@@ -280,17 +346,15 @@ function hideDeleteModal() {
   loanToDelete.loan_date = ''
 }
 
-// --- Выделение ---
+// --- Массовое удаление ---
 function toggleSelection(id) {
-  if (selectedLoans.value.includes(id)) {
-    selectedLoans.value = selectedLoans.value.filter(x => x !== id)
-  } else {
-    selectedLoans.value.push(id)
-  }
+  if (!isAdmin.value) return
+  if (selectedLoans.value.includes(id)) selectedLoans.value = selectedLoans.value.filter(x => x !== id)
+  else selectedLoans.value.push(id)
 }
 
-// --- Модалка массового удаления ---
 function showDeleteSelectedModal() {
+  if (!isAdmin.value) return
   const modalEl = document.getElementById('deleteSelectedModal')
   deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   deleteSelectedModalInstance.show()
@@ -301,9 +365,8 @@ function hideDeleteSelectedModal() {
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
 }
 
-// --- Массовое удаление ---
 async function confirmDeleteSelected() {
-  if (!selectedLoans.value.length) return
+  if (!isAdmin.value || !selectedLoans.value.length) return
   await Promise.all(selectedLoans.value.map(id => axios.delete(`/loans/${id}/`)))
   selectedLoans.value = []
   await fetchLoans()
@@ -311,9 +374,7 @@ async function confirmDeleteSelected() {
   hideDeleteSelectedModal()
 }
 
-// --- Экспорт данных ---
-function exportLoansExcel() { exportLoans('excel') }
-function exportLoansWord() { exportLoans('word') }
+// --- Экспорт ---
 function exportLoans(type = 'excel') {
   axios({
     url: `/loans/export/?type=${type}`,
@@ -332,39 +393,14 @@ function exportLoans(type = 'excel') {
 
 // --- Инициализация ---
 onMounted(async () => {
-  await Promise.all([fetchLoans(), fetchBooks(), fetchMembers(), fetchLoanStats()])
+  await Promise.all([fetchProfile(), fetchLibraries(), fetchBooks(), fetchMembers(), fetchLoans(), fetchLoanStats()])
 })
 </script>
 
 <style scoped>
-.stats-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  font-size: 0.9em;
-}
-.stats-left {
-  display: flex;
-  gap: 12px;
-}
-.stats-right {
-  display: flex;
-  gap: 6px;
-}
-.stat {
-  background: #fafafa;
-  border: 1px solid #ddd;
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: #333;
-}
-
-/* Подсветка выделенных выдач */
-.list-group-item.selected {
-  background-color: #d1e7dd;
-  border-color: #0f5132;
-  color: #0f5132;
-}
+.stats-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 0.9em; }
+.stats-left { display: flex; gap: 12px; }
+.stats-right { display: flex; gap: 6px; }
+.stat { background: #fafafa; border: 1px solid #ddd; padding: 4px 10px; border-radius: 6px; color: #333; }
+.list-group-item.selected { background-color: #d1e7dd; border-color: #0f5132; color: #0f5132; }
 </style>

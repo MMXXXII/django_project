@@ -9,7 +9,6 @@ import Profile from "../components/Profile.vue"
 import Login from "../components/Login.vue"
 import NotFound from '../components/NotFound.vue'
 
-
 const routes = [
   { 
     path: "/", 
@@ -33,7 +32,7 @@ const routes = [
   { 
     path: "/members", 
     component: Members,
-    meta: { requiresAuth: true, requiresOtp: true }
+    meta: { requiresAuth: true, requiresOtp: true, requiresSuperUser: true } // Проверка на суперпользователя
   },
   { 
     path: "/loans", 
@@ -57,36 +56,45 @@ const routes = [
   }
 ]
 
-
 const router = createRouter({
   history: createWebHistory(),
   routes,
 })
 
-let initialized = false
+let initialized = false  // Инициализация переменной
 
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
-  
+
+  // Проверяем, была ли уже выполнена инициализация
   if (!initialized) {
     initialized = true
     const restored = userStore.initializeFromStorage()
     console.log('[v0] Store initialized from storage:', restored)
   }
-  
+
+  // Проверка, требует ли маршрут авторизации
   if (to.meta.requiresAuth) {
     if (!userStore.isAuthenticated) {
       console.log('[v0] Not authenticated, redirecting to login')
       next('/login')
       return
     }
-    
+
+    // Проверка на OTP (если требуется)
     if (to.meta.requiresOtp && !userStore.isOtpVerified) {
       console.log('[v0] OTP not verified, redirecting to login')
       next('/login')
       return
     }
-    
+
+    // Проверка на суперпользователя, если это требуется
+    if (to.meta.requiresSuperUser && !userStore.isSuperUser) {
+      console.log('[v0] Not superuser, redirecting to books')
+      next('/books') // Редирект на другую страницу, если не суперпользователь
+      return
+    }
+
     next()
   } else if (to.path === '/login' && userStore.isAuthenticated && userStore.isOtpVerified) {
     console.log('[v0] Already authenticated, redirecting to books')

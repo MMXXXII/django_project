@@ -5,13 +5,18 @@ from django.contrib.auth.models import User
 class Genre(models.Model):
     name = models.TextField("Жанр")
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
-
+    
     class Meta:
         verbose_name = "Жанр"
         verbose_name_plural = "Жанры"
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.user.is_superuser:  # Only superusers can modify
+            raise PermissionError("You do not have permission to modify this Genre.")
+        super().save(*args, **kwargs)
 
 
 class Library(models.Model):
@@ -32,7 +37,7 @@ class Book(models.Model):
     genre = models.ForeignKey(Genre, on_delete=models.CASCADE, verbose_name="Жанр")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
     cover = models.ImageField("Обложка", upload_to="books", null=True, blank=True)
-    user = models.ForeignKey(User, verbose_name="Пользователь", on_delete=models.CASCADE, null=True, blank=True)
+    # user = models.ForeignKey(User, verbose_name="Пользователь", on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
         verbose_name = "Книга"
@@ -55,6 +60,10 @@ class Member(models.Model):
     def __str__(self) -> str:
         return self.first_name
 
+    def save(self, *args, **kwargs):
+        if not self.user.is_superuser:  # Only superusers can modify
+            raise PermissionError("You do not have permission to modify this Member.")
+        super().save(*args, **kwargs)
 
 
 
@@ -71,9 +80,17 @@ class Loan(models.Model):
     def __str__(self) -> str:
         return f"{self.book} → {self.member}"
 
+
 class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    opt_key = models.CharField(max_length=255)  # Здесь хранится секретный ключ для TOTP (OTP)
+    """
+    Расширение модели User для хранения дополнительной информации
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    age = models.IntegerField(null=True, blank=True, verbose_name='Возраст')
+    
+    class Meta:
+        verbose_name = 'Профиль пользователя'
+        verbose_name_plural = 'Профили пользователей'
     
     def __str__(self):
-        return f'{self.user.username} Profile'
+        return f'Профиль {self.user.username}'
