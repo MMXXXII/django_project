@@ -8,6 +8,7 @@ import Loans from "../components/Loans.vue"
 import Profile from "../components/Profile.vue"
 import Login from "../components/Login.vue"
 import NotFound from '../components/NotFound.vue'
+import NoAccess from '../components/NoAccess.vue' // Страница для доступа без прав
 
 const routes = [
   { 
@@ -47,6 +48,11 @@ const routes = [
   { 
     path: "/login", 
     component: Login 
+  },
+  { 
+    path: "/no-access", 
+    component: NoAccess, // Страница ошибки доступа
+    meta: { hideHeader: true }
   },
   { 
     path: '/:pathMatch(.*)*', 
@@ -90,8 +96,8 @@ router.beforeEach(async (to, from, next) => {
 
     // Проверка на суперпользователя, если это требуется
     if (to.meta.requiresSuperUser && !userStore.isSuperUser) {
-      console.log('[v0] Not superuser, redirecting to books')
-      next('/books') // Редирект на другую страницу, если не суперпользователь
+      console.log('[v0] Not superuser, redirecting to no-access')
+      next('/no-access') // Редирект на страницу с ошибкой доступа, если не суперпользователь
       return
     }
 

@@ -5,7 +5,7 @@
   <div class="stats-line">
     <div class="stats-left">
       <div class="stat">Количество жанров: {{ genreStats?.count || 0 }}</div>
-      <div class="stat">Самый используемый: {{ genreStats?.top || "нет данных" }}</div>
+      <div class="stat">Самый используемый жанр: {{ genreStats?.top || "нет данных" }}</div>
     </div>
 
     <div class="stats-right">

@@ -6,17 +6,15 @@
       <div class="stats-left">
         <div class="stat">Читателей: {{ memberStats?.count_users || 0 }}</div>
         <div class="stat">Администраторов: {{ memberStats?.count_admins || 0 }}</div>
-        <div class="stat">Средний возраст пользоват-ей: {{ memberStats?.avg_age_users || 0 }} лет</div>
+        <div class="stat">Средний возраст польз-ей: {{ memberStats?.avg_age_users || 0 }} лет</div>
         <div class="stat">Средний возраст админ-ов: {{ memberStats?.avg_age_admins || 0 }} лет</div>
-        <div class="stat">Среднее кол-во, взятых читателями: {{ memberStats?.avg_books || 0 }}</div>
+        <div class="stat">Среднее кол-во книг, взятых читателями: {{ memberStats?.avg_books || 0 }}</div>
       </div>
       <div class="stats-right">
         <button class="btn btn-success btn-sm me-2" @click="exportMembersExcel">Excel</button>
         <button class="btn btn-primary btn-sm" @click="exportMembersWord">Word</button>
       </div>
     </div>
-
-
 
     <!-- Поиск -->
     <div class="mb-3">
@@ -185,6 +183,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
+import { useUserStore } from '../stores/userStore'
+
 
 const members = ref([])
 const filteredMembers = ref([])
@@ -195,6 +195,7 @@ const selectedMembers = ref([])
 const memberToAdd = reactive({ username: '', email: '', password: '', age: null, is_superuser: false, is_staff: false })
 const memberToEdit = reactive({ id: null, username: '', email: '', password: '', age: null, is_superuser: false, is_staff: false })
 const memberToDelete = reactive({ id: null, username: '' })
+const userStore = useUserStore()
 
 let deleteSelectedModalInstance = null
 
@@ -244,6 +245,7 @@ function onEditClick(m) {
   modalInstance.show();
 }
 
+// В методе onUpdateMember, при изменении прав администратора:
 async function onUpdateMember() {
   const formData = new FormData();
   formData.append('username', memberToEdit.username);
@@ -253,11 +255,29 @@ async function onUpdateMember() {
   formData.append('is_superuser', memberToEdit.is_superuser);
   formData.append('is_staff', memberToEdit.is_staff);
 
+  // Сохраняем данные на сервере
   await axios.put(`/members/${memberToEdit.id}/`, formData);
-  await fetchMembers();
-  await fetchMemberStats();
-  hideEditModal();
+
+  // Обновляем состояние в Pinia Store и localStorage
+  userStore.isSuperUser = memberToEdit.is_superuser;  // Обновляем состояние в Pinia
+  localStorage.setItem('is_superuser', memberToEdit.is_superuser.toString());  // Сохраняем в localStorage
+
+  // Если права администратора утеряны, перенаправляем на страницу с ограниченным доступом
+  if (!memberToEdit.is_superuser) {
+    userStore.isSuperUser = false;  // Обновляем статус в Pinia
+    localStorage.setItem('is_superuser', 'false');  // Обновляем в localStorage
+    window.location.href = '/no-access';  // Перенаправление на страницу с ограниченным доступом
+  } else {
+    // В противном случае обновляем список пользователей
+    await fetchMembers();
+    await fetchMemberStats();
+    hideEditModal();
+  }
 }
+
+
+
+
 
 function showAddModal() {
   memberToAdd.username = '';
@@ -335,8 +355,19 @@ async function confirmDeleteSelected() {
 }
 
 async function fetchMemberStats() {
-  const response = await axios.get('/members/stats/');
-  memberStats.value = response.data;
+  try {
+    const response = await axios.get('/members/stats/', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      }
+    });
+    memberStats.value = response.data;
+  } catch (error) {
+    console.error('Ошибка при получении данных:', error);
+    if (error.response && error.response.status === 403) {
+      router.push('/no-access'); // Если нет доступа, перенаправить
+    }
+  }
 }
 
 async function exportMembersExcel() {

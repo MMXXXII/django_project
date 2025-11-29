@@ -47,6 +47,7 @@ export const useUserStore = defineStore('user', {
       console.log('[v0] Sending data:', { username, password: '***' })
 
       try {
+
         const response = await axios.post('/userprofile/login/', {
           username,
           password
@@ -67,7 +68,6 @@ export const useUserStore = defineStore('user', {
 
           console.log('[v0] SuperUser status:', this.isSuperUser)
 
-          // Обновляем user в localStorage
           localStorage.setItem('user_data', JSON.stringify(this.user))
           localStorage.setItem('is_authenticated', 'false')
           localStorage.setItem('is_otp_verified', 'false')
@@ -110,7 +110,6 @@ export const useUserStore = defineStore('user', {
           this.error = null
           this.pendingUsername = null
 
-          // Обновляем user в localStorage после успешной верификации OTP
           localStorage.setItem('user_data', JSON.stringify(this.user))
           localStorage.setItem('is_authenticated', 'true')
           localStorage.setItem('is_otp_verified', 'true')
@@ -149,13 +148,6 @@ export const useUserStore = defineStore('user', {
         this.user = response.data
         this.isAuthenticated = true
         this.isSuperUser = this.user.is_superuser
-
-        // Сохраняем пользователя в localStorage
-        localStorage.setItem('user_data', JSON.stringify(this.user))
-        localStorage.setItem('is_authenticated', 'true')
-        localStorage.setItem('is_otp_verified', 'true')
-        localStorage.setItem('is_superuser', this.isSuperUser.toString())
-
         return this.user
       } catch (error) {
         this.isAuthenticated = false
@@ -183,7 +175,6 @@ export const useUserStore = defineStore('user', {
         this.error = null
         this.loading = false
 
-        // Очистка данных в localStorage
         localStorage.removeItem('user_data')
         localStorage.removeItem('is_authenticated')
         localStorage.removeItem('is_otp_verified')

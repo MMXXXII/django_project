@@ -5,7 +5,7 @@
   <div class="stats-line">
     <div class="stats-left">
       <div class="stat">Количество библиотек: {{ libraryStats?.count || 0 }}</div>
-      <div class="stat">Самая используемая: {{ libraryStats?.top || "нет данных" }}</div>
+      <div class="stat">Самая используемая библиотека: {{ libraryStats?.top || "нет данных" }}</div>
     </div>
 
     <div class="stats-right">

@@ -7,9 +7,6 @@
     <div v-else-if="userStore.user" class="user-info">
       <p><strong>Имя пользователя:</strong> {{ userStore.user.username }}</p>
       <p><strong>Email:</strong> {{ userStore.user.email }}</p>
-      <p v-if="userStore.user.is_staff !== undefined">
-        <strong>Администратор:</strong> {{ userStore.user.is_staff ? 'Да' : 'Нет' }}
-      </p>
       <button @click="handleLogout" class="logout-btn">Выход</button>
     </div>
     
