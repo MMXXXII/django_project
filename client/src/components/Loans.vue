@@ -1,19 +1,20 @@
 <template>
   <h2>Выдачи</h2>
 
-  <!-- Статистика + кнопки -->
+  <!-- Статистика -->
+  <!-- Статистика -->
   <div class="stats-line mb-3">
     <div class="stats-left">
       <div class="stat">Количество: {{ loanStats?.count || 0 }}</div>
-      <div class="stat">Среднее: {{ loanStats?.avg || 0 }}</div>
-      <div class="stat">Максимум: {{ loanStats?.max || 0 }}</div>
-      <div class="stat">Минимум: {{ loanStats?.min || 0 }}</div>
+      <div class="stat">Читатель с максимальным количеством книг: {{ loanStats?.topReader?.name || 'Не найден' }}</div>
+      <div class="stat">Количество книг у этого читателя: {{ loanStats?.topReader?.loan_count || 0 }}</div>
     </div>
     <div class="stats-right">
       <button class="btn btn-success btn-sm me-2" @click="exportLoans('excel')">Excel</button>
       <button class="btn btn-primary btn-sm" @click="exportLoans('word')">Word</button>
     </div>
   </div>
+
 
   <!-- Фильтр по библиотеке -->
   <div class="mb-3">
@@ -25,13 +26,8 @@
 
   <!-- Поиск -->
   <div class="mb-3">
-    <input
-      v-model="searchQuery"
-      type="text"
-      class="form-control"
-      placeholder="Поиск по книгам или читателям"
-      @input="filterLoans"
-    />
+    <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по книгам или читателям"
+      @input="filterLoans" />
   </div>
 
   <!-- Сортировка -->
@@ -45,54 +41,52 @@
   <!-- Форма добавления выдачи -->
   <form class="mb-3" @submit.prevent="onAddLoan">
     <div class="row g-2 align-items-center">
-
-      <!-- Выбор библиотеки -->
       <div class="col">
         <select v-model="loanToAdd.library" @change="onLibraryChange" class="form-select" required>
           <option value="" disabled>Выберите библиотеку</option>
           <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
         </select>
       </div>
-
-      <!-- Выбор книги -->
       <div class="col">
         <select v-model="loanToAdd.book" class="form-select" required>
           <option value="" disabled>Выберите книгу</option>
-          <option v-for="b in availableBooks" :key="b.id" :value="b.id">{{ b.title }}</option>
+          <option v-for="b in availableBooks" :key="b.id" :value="b.id">
+            {{ b.title }}
+          </option>
         </select>
       </div>
-
-      <!-- Дата выдачи -->
       <div class="col-auto">
         <input type="date" v-model="loanToAdd.loan_date" class="form-control" required />
       </div>
-
-      <!-- Кнопка добавить -->
       <div class="col-auto">
         <button type="submit" class="btn btn-outline-success">Добавить</button>
       </div>
-
     </div>
   </form>
 
   <!-- Список выдач -->
   <ul class="list-group mb-3">
-    <li
-      v-for="l in filteredLoans"
-      :key="l.id"
-      class="list-group-item d-flex justify-content-between align-items-center"
-      :class="{ 'selected': selectedLoans.includes(l.id) }"
-      @click="toggleSelection(l.id)"
-    >
+    <li v-for="l in filteredLoans" :key="l.id" class="list-group-item d-flex justify-content-between align-items-center"
+      :class="{ 'selected': selectedLoans.includes(l.id), 'returned': l.return_date }" @click="toggleSelection(l.id)">
       <div>
         <div>
           <strong>{{ booksById[l.book]?.title }}</strong> →
-          {{ isAdmin ? membersById[l.member]?.first_name : currentUser.first_name }}
+          {{ getMemberName(l.member) }}
+          <span v-if="l.return_date" class="badge bg-success ms-2">Возвращена {{ l.return_date }}</span>
+          <span v-else class="badge bg-warning ms-2">Выдана</span>
         </div>
-        <div class="small text-muted">{{ l.loan_date }}</div>
+        <div class="small text-muted">Дата выдачи: {{ l.loan_date }}</div>
+        <div class="text-muted" style="font-size: 0.85em;">
+          Библиотека: {{ getLibraryName(l.book) }}
+        </div>
       </div>
-      <div>
-        <button v-if="isAdmin" class="btn btn-sm btn-success me-2" @click.stop="onEditClick(l)">
+      <div class="d-flex gap-2">
+        <!-- Кнопка возврата для невозвращенных книг -->
+        <button v-if="!l.return_date" class="btn btn-sm btn-info" @click.stop="onReturnBook(l)">
+          <i class="bi bi-arrow-return-left"></i> Вернуть
+        </button>
+
+        <button v-if="isAdmin" class="btn btn-sm btn-success" @click.stop="onEditClick(l)">
           <i class="bi bi-pen-fill"></i>
         </button>
         <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
@@ -109,7 +103,7 @@
     </button>
   </div>
 
-  <!-- Модалки редактирования и удаления -->
+  <!-- Модалки (без изменений) -->
   <div class="modal fade" id="editLoanModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content" v-if="isAdmin">
@@ -127,7 +121,7 @@
             <option v-for="b in availableEditBooks" :key="b.id" :value="b.id">{{ b.title }}</option>
           </select>
           <select v-model="loanToEdit.member" class="form-select mb-2">
-            <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }}</option>
+            <option v-for="m in allLibraryMembers" :key="m.id" :value="m.id">{{ m.first_name }}</option>
           </select>
           <input type="date" v-model="loanToEdit.loan_date" class="form-control" />
         </div>
@@ -181,20 +175,18 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 
-// --- Данные пользователя ---
 const currentUser = reactive({ id: 0, first_name: '', role: 'user' })
 const isAdmin = computed(() => currentUser.role === 'admin')
+const currentMember = ref(null)
 
-// --- Основные данные ---
 const libraries = ref([])
 const selectedLibrary = ref('')
 const books = ref([])
-const members = ref([])
+const allLibraryMembers = ref([])
 const loans = ref([])
 const filteredLoans = ref([])
 const loanStats = ref(null)
 
-// --- Для добавления и редактирования ---
 const loanToAdd = reactive({ library: null, book: null, loan_date: '' })
 const loanToEdit = reactive({ id: null, library: null, book: null, member: null, loan_date: '', modalInstance: null })
 const loanToDelete = reactive({ id: null, book: null, member: null, loan_date: '' })
@@ -206,45 +198,109 @@ let deleteSelectedModalInstance = null
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
-// --- Быстрый доступ по id ---
 const booksById = computed(() => Object.fromEntries(books.value.map(b => [b.id, b])))
-const membersById = computed(() => Object.fromEntries(members.value.map(m => [m.id, m])))
-const loanToDeleteDisplay = computed(() => `${booksById[loanToDelete.book]?.title || ''} → ${membersById[loanToDelete.member]?.first_name || ''}`)
 
-// --- Книги фильтруются по выбранной библиотеке ---
+const loanToDeleteDisplay = computed(() => {
+  const book = booksById.value[loanToDelete.book]?.title || ''
+  const member = getMemberName(loanToDelete.member)
+  return `${book} → ${member}`
+})
+
 const availableBooks = computed(() =>
-  books.value.filter(b => !loanToAdd.library || b.library === Number(loanToAdd.library))
+  books.value.filter(b => {
+    // Фильтр по библиотеке
+    if (loanToAdd.library && b.library !== Number(loanToAdd.library)) {
+      return false
+    }
+    // Проверяем доступность (is_available приходит с сервера)
+    return b.is_available === true
+  })
 )
 
 const availableEditBooks = computed(() =>
-  books.value.filter(b => !loanToEdit.library || b.library === Number(loanToEdit.library))
+  books.value.filter(b => {
+    if (loanToEdit.library && b.library !== Number(loanToEdit.library)) {
+      return false
+    }
+    return b.is_available === true
+  })
 )
 
-
-
-// --- API запросы ---
-async function fetchProfile() {
-  const r = await axios.get('/userprofile/') 
-  Object.assign(currentUser, r.data)
+function getMemberName(memberId) {
+  const member = allLibraryMembers.value.find(m => m.id === memberId)
+  if (member) return member.first_name
+  if (currentMember.value && currentMember.value.id === memberId) {
+    return currentMember.value.first_name
+  }
+  return 'Неизвестно'
 }
-async function fetchLibraries() { libraries.value = (await axios.get('/libraries/')).data }
-async function fetchBooks() { books.value = (await axios.get('/books/')).data }
-async function fetchMembers() { members.value = (await axios.get('/members/')).data }
+
+async function fetchProfile() {
+  try {
+    const r = await axios.get('/userprofile/info/')
+    if (r.data.id) {
+      currentUser.id = r.data.id
+      currentUser.first_name = r.data.username || r.data.first_name || ''
+      currentUser.role = r.data.is_superuser ? 'admin' : 'user'
+      console.log('[Loans] User profile loaded:', currentUser)
+    }
+  } catch (error) {
+    console.error('[Loans] Error loading user profile:', error)
+  }
+}
+
+async function fetchCurrentMember() {
+  try {
+    const response = await axios.get('/library-members/')
+    console.log('[Loans] Library members response:', response.data)
+
+    if (response.data && response.data.length > 0) {
+      if (isAdmin.value) {
+        allLibraryMembers.value = response.data
+        console.log('[Loans] Admin: loaded all library members')
+      } else {
+        currentMember.value = response.data[0]
+        allLibraryMembers.value = response.data
+        console.log('[Loans] User: loaded current member:', currentMember.value)
+      }
+    } else {
+      console.warn('[Loans] No library members found')
+      if (!isAdmin.value) {
+        alert('Не найден профиль читателя. Обратитесь к администратору.')
+      }
+    }
+  } catch (error) {
+    console.error('[Loans] Error loading library members:', error)
+  }
+}
+
+async function fetchLibraries() {
+  libraries.value = (await axios.get('/libraries/')).data
+}
+
+async function fetchBooks() {
+  books.value = (await axios.get('/books/')).data
+  console.log('[Loans] Books loaded:', books.value)
+}
+
 async function fetchLoans() {
   const r = await axios.get('/loans/')
-  loans.value = isAdmin.value ? r.data : r.data.filter(l => l.member.id === currentUser.id)
+  loans.value = r.data
+  console.log('[Loans] Loans loaded:', loans.value)
   filterLoans()
 }
-async function fetchLoanStats() { loanStats.value = (await axios.get('/loans/stats/')).data }
 
-// --- Фильтрация и сортировка ---
-watch([loans, books, members, selectedLibrary], filterLoans, { deep: true })
+async function fetchLoanStats() {
+  loanStats.value = (await axios.get('/loans/stats/')).data
+}
+
+watch([loans, books, selectedLibrary], filterLoans, { deep: true })
 
 function filterLoans() {
   const query = searchQuery.value.toLowerCase()
   filteredLoans.value = loans.value.filter(l => {
     const bookTitle = booksById.value[l.book]?.title?.toLowerCase() || ''
-    const memberName = membersById.value[l.member]?.first_name?.toLowerCase() || ''
+    const memberName = getMemberName(l.member).toLowerCase()
     const libraryMatch = selectedLibrary.value ? booksById.value[l.book]?.library === Number(selectedLibrary.value) : true
     return (bookTitle.includes(query) || memberName.includes(query)) && libraryMatch
   })
@@ -259,33 +315,77 @@ function sortLoans() {
   })
 }
 
-// --- Добавление ---
 function onLibraryChange() { loanToAdd.book = null }
+function onEditLibraryChange() { loanToEdit.book = null }
 
 async function onAddLoan() {
-  if (!loanToAdd.book || !loanToAdd.loan_date) return
+  if (!loanToAdd.book || !loanToAdd.loan_date) {
+    alert('Заполните все поля')
+    return
+  }
+
+  // Проверяем наличие профиля читателя
+  if (!currentMember.value || !currentMember.value.id) {
+    alert('У вас нет профиля читателя библиотеки. Обратитесь к администратору.')
+    console.error('[Loans] currentMember is null or has no id:', currentMember.value)
+    return
+  }
 
   const data = {
     book: loanToAdd.book,
-    member: currentUser.id,
+    member: currentMember.value.id,
     loan_date: loanToAdd.loan_date
   }
 
-  await axios.post('/loans/', data)
+  try {
+    console.log('[Loans] Creating loan:', data)
+    await axios.post('/loans/', data)
 
-  loanToAdd.library = null
-  loanToAdd.book = null
-  loanToAdd.loan_date = ''
+    loanToAdd.library = null
+    loanToAdd.book = null
+    loanToAdd.loan_date = ''
 
-  await fetchLoans()
-  await fetchLoanStats()
+    await fetchBooks()  // Обновляем список книг для is_available
+    await fetchLoans()
+    await fetchLoanStats()
+
+    alert('Выдача успешно добавлена!')
+  } catch (error) {
+    console.error('[Loans] Error adding loan:', error.response?.data || error)
+    alert(`Ошибка: ${error.response?.data?.detail || error.message}`)
+  }
 }
 
-// --- Редактирование ---
+// Функция возврата книги
+async function onReturnBook(loan) {
+  if (!confirm(`Вернуть книгу "${booksById.value[loan.book]?.title}"?`)) {
+    return
+  }
+
+  try {
+    // Отправляем запрос на возврат книги
+    await axios.post(`/loans/${loan.id}/return/`)
+
+    // Обновляем список книг и выдач
+    await fetchBooks()  // Обновляем список книг
+    await fetchLoans()  // Обновляем список выдач
+
+    // Обновляем статистику
+    await fetchLoanStats()  // Запрашиваем обновленную статистику
+
+    alert('Книга успешно возвращена!')
+  } catch (error) {
+    console.error('[Loans] Error returning book:', error)
+    alert(`Ошибка при возврате: ${error.response?.data?.detail || error.message}`)
+  }
+}
+
+
+
 function onEditClick(l) {
   if (!isAdmin.value) return
   loanToEdit.id = l.id
-  loanToEdit.library = booksById[l.book]?.library.id || null
+  loanToEdit.library = booksById.value[l.book]?.library || null
   loanToEdit.book = l.book
   loanToEdit.member = l.member
   loanToEdit.loan_date = l.loan_date
@@ -293,7 +393,6 @@ function onEditClick(l) {
   loanToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
   loanToEdit.modalInstance.show()
 }
-function onEditLibraryChange() { loanToEdit.book = null }
 
 async function onUpdateLoan() {
   if (!loanToEdit.id || !isAdmin.value) return
@@ -302,6 +401,7 @@ async function onUpdateLoan() {
     member: loanToEdit.member,
     loan_date: loanToEdit.loan_date
   })
+  await fetchBooks()
   await fetchLoans()
   await fetchLoanStats()
   hideEditModal()
@@ -317,7 +417,6 @@ function hideEditModal() {
   loanToEdit.loan_date = ''
 }
 
-// --- Удаление ---
 function onRemoveClick(l) {
   if (!isAdmin.value) return
   loanToDelete.id = l.id
@@ -332,6 +431,7 @@ function onRemoveClick(l) {
 async function confirmDelete() {
   if (!loanToDelete.id || !isAdmin.value) return
   await axios.delete(`/loans/${loanToDelete.id}/`)
+  await fetchBooks()  // Обновляем книги после удаления выдачи
   await fetchLoans()
   await fetchLoanStats()
   hideDeleteModal()
@@ -346,7 +446,6 @@ function hideDeleteModal() {
   loanToDelete.loan_date = ''
 }
 
-// --- Массовое удаление ---
 function toggleSelection(id) {
   if (!isAdmin.value) return
   if (selectedLoans.value.includes(id)) selectedLoans.value = selectedLoans.value.filter(x => x !== id)
@@ -369,12 +468,12 @@ async function confirmDeleteSelected() {
   if (!isAdmin.value || !selectedLoans.value.length) return
   await Promise.all(selectedLoans.value.map(id => axios.delete(`/loans/${id}/`)))
   selectedLoans.value = []
+  await fetchBooks()
   await fetchLoans()
   await fetchLoanStats()
   hideDeleteSelectedModal()
 }
 
-// --- Экспорт ---
 function exportLoans(type = 'excel') {
   axios({
     url: `/loans/export/?type=${type}`,
@@ -391,16 +490,63 @@ function exportLoans(type = 'excel') {
   }).catch(err => { console.error(err); alert('Ошибка при скачивании файла') })
 }
 
-// --- Инициализация ---
 onMounted(async () => {
-  await Promise.all([fetchProfile(), fetchLibraries(), fetchBooks(), fetchMembers(), fetchLoans(), fetchLoanStats()])
+  await fetchProfile()
+  await Promise.all([
+    fetchLibraries(),
+    fetchBooks(),
+    fetchLoans(),
+    fetchLoanStats()
+  ])
+
+  await fetchCurrentMember()
 })
+
+function getLibraryName(bookId) {
+  const book = booksById.value[bookId]
+  if (!book) return ''
+  const library = libraries.value.find(lib => lib.id === book.library)
+  return library ? library.name : ''
+}
+
 </script>
 
 <style scoped>
-.stats-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 0.9em; }
-.stats-left { display: flex; gap: 12px; }
-.stats-right { display: flex; gap: 6px; }
-.stat { background: #fafafa; border: 1px solid #ddd; padding: 4px 10px; border-radius: 6px; color: #333; }
-.list-group-item.selected { background-color: #d1e7dd; border-color: #0f5132; color: #0f5132; }
+.stats-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+
+.stats-left {
+  display: flex;
+  gap: 12px;
+}
+
+.stats-right {
+  display: flex;
+  gap: 6px;
+}
+
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+
+.list-group-item.selected {
+  background-color: #d1e7dd;
+  border-color: #0f5132;
+  color: #0f5132;
+}
+
+.list-group-item.returned {
+  opacity: 0.7;
+  background-color: #f8f9fa;
+}
 </style>

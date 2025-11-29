@@ -6,10 +6,11 @@ class BookSerializer(serializers.ModelSerializer):
     genre_name = serializers.StringRelatedField(source='genre', read_only=True)
     library_name = serializers.StringRelatedField(source='library', read_only=True)
     cover_url = serializers.SerializerMethodField()
+    is_available = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
-        fields = ['id', 'title', 'genre', 'library', 'genre_name', 'library_name', 'cover', 'cover_url']
+        fields = ['id', 'title', 'genre', 'library', 'genre_name', 'library_name', 'cover', 'cover_url', 'is_available']
         read_only_fields = ['user']
 
     def get_cover_url(self, obj):
@@ -17,8 +18,13 @@ class BookSerializer(serializers.ModelSerializer):
             request = self.context.get('request')
             return request.build_absolute_uri(obj.cover.url) if request else obj.cover.url
         return None
+    
+    def get_is_available(self, obj):
+        """Возвращает True, если книга доступна (не выдана или возвращена)"""
+        return obj.is_available()
 
 
+# Остальные сериализаторы без изменений...
 class GenreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Genre
@@ -46,12 +52,14 @@ class LibrarySerializer(serializers.ModelSerializer):
 
 
 class MemberSerializer(serializers.ModelSerializer):
-    library = serializers.PrimaryKeyRelatedField(queryset=Library.objects.all())
+    library_name = serializers.CharField(source='library.name', read_only=True)
+    user_name = serializers.CharField(source='user.username', read_only=True)
     photo_url = serializers.SerializerMethodField()
-
+    
     class Meta:
         model = Member
-        fields = ['id', 'first_name', 'library', 'photo', 'photo_url', 'user']
+        fields = ['id', 'user', 'user_name', 'library', 'library_name', 
+                  'first_name', 'photo', 'photo_url']
         read_only_fields = ['user']
 
     def get_photo_url(self, obj):
@@ -74,10 +82,13 @@ class MemberSerializer(serializers.ModelSerializer):
 
 
 class LoanSerializer(serializers.ModelSerializer):
+    book_title = serializers.CharField(source='book.title', read_only=True)
+    member_name = serializers.CharField(source='member.first_name', read_only=True)
+    
     class Meta:
         model = Loan
-        fields = ['id', 'book', 'member', 'loan_date']  # user убрали из полей
-        read_only_fields = []  # все поля можно отправлять кроме user, который подставляется автоматически
+        fields = ['id', 'book', 'member', 'loan_date', 'return_date', 'book_title', 'member_name']
+        read_only_fields = ['return_date']
 
     def create(self, validated_data):
         # Автоматически подставляем пользователя из request
@@ -94,7 +105,6 @@ class OTPSerializer(serializers.Serializer):
     key = serializers.CharField()
 
 
-# Сериализатор для пользователей системы (User) с полем возраста
 class UserSerializer(serializers.ModelSerializer):
     age = serializers.IntegerField(source='profile.age', required=False, allow_null=True)
     
@@ -104,16 +114,13 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
     
     def update(self, instance, validated_data):
-        # Извлекаем данные профиля
         profile_data = validated_data.pop('profile', {})
         age = profile_data.get('age')
         
-        # Обновляем пользователя
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
-        # Обновляем возраст в профиле
         if age is not None:
             profile, created = UserProfile.objects.get_or_create(user=instance)
             profile.age = age

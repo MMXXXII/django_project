@@ -16,13 +16,7 @@
 
   <!-- Поиск -->
   <div class="mb-3">
-    <input
-      v-model="searchQuery"
-      type="text"
-      class="form-control"
-      placeholder="Поиск по жанрам"
-      @input="filterGenres"
-    />
+    <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по жанрам" @input="filterGenres" />
   </div>
 
   <!-- Сортировка -->
@@ -54,13 +48,10 @@
 
   <!-- Список жанров -->
   <ul class="list-group">
-    <li
-      v-for="g in filteredGenres"
-      :key="g.id"
+    <li v-for="g in filteredGenres" :key="g.id"
       class="list-group-item d-flex justify-content-between align-items-center"
-      :class="{ 'selected': selectedGenres.includes(g.id) }"
-      @click="isAdmin && toggleSelection(g.id)"
-    >
+      :class="{ 'selected': isAdmin && selectedGenres.includes(g.id) }"
+      @click="isAdmin && toggleSelection(g.id)">
       <div>{{ g.name }}</div>
 
       <!-- Кнопки (только админ) -->
@@ -75,7 +66,7 @@
     </li>
   </ul>
 
-  <!-- Модалка редактирования -->
+  <!-- Модалки -->
   <div class="modal fade" id="editGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -94,7 +85,6 @@
     </div>
   </div>
 
-  <!-- Модалка удаления одного -->
   <div class="modal fade" id="deleteGenreModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -113,7 +103,6 @@
     </div>
   </div>
 
-  <!-- Модалка массового удаления -->
   <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -133,7 +122,6 @@
   </div>
 </template>
 
-
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import axios from "axios";
@@ -143,12 +131,10 @@ const genres = ref([]);
 const filteredGenres = ref([]);
 const searchQuery = ref("");
 const sortOrder = ref("asc");
-
 const genreStats = ref(null);
-
 const user = ref(null);
 const isAdmin = computed(() => user.value?.is_superuser);
-
+const selectedGenres = ref([]);
 
 const genreToAdd = reactive({ name: "" });
 const genreToEdit = reactive({ id: null, name: "", modalInstance: null });
@@ -157,11 +143,8 @@ const genreToDelete = reactive({ id: null, name: "" });
 let deleteModalInstance = null;
 let deleteSelectedModalInstance = null;
 
-const selectedGenres = ref([]);
-
-// --- API ---
 async function fetchUser() {
-  const r = await axios.get("/user/info/");
+  const r = await axios.get("/userprofile/info/");
   user.value = r.data;
 }
 
@@ -176,7 +159,6 @@ async function fetchGenreStats() {
   genreStats.value = r.data;
 }
 
-// --- Фильтр и сортировка ---
 function filterGenres() {
   filteredGenres.value = genres.value.filter((g) =>
     g.name.toLowerCase().includes(searchQuery.value.toLowerCase())
@@ -192,7 +174,6 @@ function sortGenres() {
   );
 }
 
-// --- Добавление ---
 async function onAddGenre() {
   if (!genreToAdd.name || !isAdmin.value) return;
   await axios.post("/genres/", { ...genreToAdd });
@@ -201,7 +182,6 @@ async function onAddGenre() {
   await fetchGenreStats();
 }
 
-// --- Редактирование ---
 function onEditClick(g) {
   if (!isAdmin.value) return;
   genreToEdit.id = g.id;
@@ -226,7 +206,6 @@ function hideEditModal() {
   genreToEdit.name = "";
 }
 
-// --- Удаление одного ---
 function onRemoveClick(g) {
   if (!isAdmin.value) return;
   genreToDelete.id = g.id;
@@ -238,7 +217,12 @@ function onRemoveClick(g) {
 
 async function confirmDelete() {
   if (!isAdmin.value || !genreToDelete.id) return;
-  await axios.delete(`/genres/${genreToDelete.id}/`);
+  const deletedId = genreToDelete.id;
+  await axios.delete(`/genres/${deletedId}/`);
+  
+  // Убираем удаленный жанр из выделенных
+  selectedGenres.value = selectedGenres.value.filter(id => id !== deletedId);
+  
   hideDeleteModal();
   await fetchGenres();
   await fetchGenreStats();
@@ -251,7 +235,6 @@ function hideDeleteModal() {
   genreToDelete.name = "";
 }
 
-// --- Выделение ---
 function toggleSelection(id) {
   if (!isAdmin.value) return;
   if (selectedGenres.value.includes(id)) {
@@ -261,7 +244,6 @@ function toggleSelection(id) {
   }
 }
 
-// --- Массовое удаление ---
 function showDeleteSelectedModal() {
   if (!isAdmin.value) return;
   const modal = document.getElementById("deleteSelectedModal");
@@ -285,13 +267,8 @@ async function confirmDeleteSelected() {
   await fetchGenreStats();
 }
 
-// --- Экспорт ---
-function exportGenresExcel() {
-  exportData("excel");
-}
-function exportGenresWord() {
-  exportData("word");
-}
+function exportGenresExcel() { exportData("excel"); }
+function exportGenresWord() { exportData("word"); }
 
 function exportData(type = "excel") {
   axios({
@@ -311,14 +288,12 @@ function exportData(type = "excel") {
     .catch(() => alert("Ошибка при скачивании файла"));
 }
 
-// --- Инициализация ---
 onMounted(async () => {
   await fetchUser();
   await fetchGenres();
   await fetchGenreStats();
 });
 </script>
-
 
 <style scoped>
 .stats-line {
@@ -329,14 +304,8 @@ onMounted(async () => {
   margin-bottom: 14px;
   font-size: 0.9em;
 }
-.stats-left {
-  display: flex;
-  gap: 12px;
-}
-.stats-right {
-  display: flex;
-  gap: 6px;
-}
+.stats-left { display: flex; gap: 12px; }
+.stats-right { display: flex; gap: 6px; }
 .stat {
   background: #fafafa;
   border: 1px solid #ddd;
@@ -344,8 +313,6 @@ onMounted(async () => {
   border-radius: 6px;
   color: #333;
 }
-
-/* Подсветка выделенных жанров */
 .list-group-item.selected {
   background-color: #d1e7dd;
   border-color: #0f5132;

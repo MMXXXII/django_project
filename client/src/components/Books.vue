@@ -171,7 +171,7 @@ const searchQuery = ref('')
 const sortOrder = ref('asc')
 
 // --- API ---
-async function fetchUser() { user.value = (await axios.get('/user/info/')).data }
+async function fetchUser() { user.value = (await axios.get('/userprofile/info/')).data }
 async function fetchBooks() {
   const r = await axios.get('/books/')
 books.value = r.data.map(b => ({
@@ -188,8 +188,11 @@ async function fetchLibraries() { libraries.value = (await axios.get('/libraries
 
 // --- Фильтр / сортировка ---
 function filterBooks() {
-  filteredBooks.value = books.value.filter(b => b.title.toLowerCase().includes(searchQuery.value.toLowerCase()))
-  sortBooks()
+  // Фильтруем книги по статусу (выдача исключается)
+  filteredBooks.value = books.value.filter(b => 
+    b.title.toLowerCase().includes(searchQuery.value.toLowerCase()) && b.status !== 'borrowed'
+  );
+  sortBooks();
 }
 function sortBooks() {
   filteredBooks.value.sort((a, b) => {
@@ -198,6 +201,17 @@ function sortBooks() {
     return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
   })
 }
+
+async function onBorrowBook(bookId) {
+  try {
+    await axios.put(`/books/${bookId}/`, { status: 'borrowed' });
+    // После того как книга выдана, обновляем список книг
+    await fetchBooks();  
+  } catch (error) {
+    console.error('Ошибка при выдаче книги', error);
+  }
+}
+
 
 // --- CRUD ---
 async function onAddBook() {

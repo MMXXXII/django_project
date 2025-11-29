@@ -142,6 +142,7 @@ class UserProfileViewSet(GenericViewSet):
     def get_user_info(self, request):
         user = request.user
         return Response({
+            'id': user.id,  # ← Добавьте эту строку
             'username': user.username,
             'email': user.email,
             'first_name': user.first_name,

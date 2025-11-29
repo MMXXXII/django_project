@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-# Create your models here.
 class Genre(models.Model):
     name = models.TextField("Жанр")
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
@@ -12,12 +11,6 @@ class Genre(models.Model):
 
     def __str__(self) -> str:
         return self.name
-
-    def save(self, *args, **kwargs):
-        if not self.user.is_superuser:  # Only superusers can modify
-            raise PermissionError("You do not have permission to modify this Genre.")
-        super().save(*args, **kwargs)
-
 
 class Library(models.Model):
     name = models.TextField("Название библиотеки")
@@ -37,7 +30,6 @@ class Book(models.Model):
     genre = models.ForeignKey(Genre, on_delete=models.CASCADE, verbose_name="Жанр")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
     cover = models.ImageField("Обложка", upload_to="books", null=True, blank=True)
-    # user = models.ForeignKey(User, verbose_name="Пользователь", on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
         verbose_name = "Книга"
@@ -45,12 +37,16 @@ class Book(models.Model):
 
     def __str__(self) -> str:
         return self.title
+    
+    def is_available(self):
+        """Проверяет, доступна ли книга для выдачи (не выдана или возвращена)"""
+        return not Loan.objects.filter(book=self, return_date__isnull=True).exists()
 
 
 class Member(models.Model):
     first_name = models.TextField("Имя")
     library = models.ForeignKey(Library, on_delete=models.CASCADE, verbose_name="Библиотека")
-    photo = models.ImageField("Фото", upload_to="members", null=True, blank=True)  # новое поле
+    photo = models.ImageField("Фото", upload_to="members", null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
 
     class Meta:
@@ -60,17 +56,12 @@ class Member(models.Model):
     def __str__(self) -> str:
         return self.first_name
 
-    def save(self, *args, **kwargs):
-        if not self.user.is_superuser:  # Only superusers can modify
-            raise PermissionError("You do not have permission to modify this Member.")
-        super().save(*args, **kwargs)
-
-
 
 class Loan(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE, verbose_name="Книга")
     member = models.ForeignKey(Member, on_delete=models.CASCADE, verbose_name="Читатель")
     loan_date = models.DateField("Дата выдачи")
+    return_date = models.DateField(null=True, blank=True, verbose_name="Дата возврата")
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Пользователь")
 
     class Meta:

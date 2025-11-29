@@ -16,13 +16,8 @@
 
   <!-- Поиск -->
   <div class="mb-3">
-    <input
-      v-model="searchQuery"
-      type="text"
-      class="form-control"
-      placeholder="Поиск по библиотекам"
-      @input="filterLibraries"
-    />
+    <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по библиотекам"
+      @input="filterLibraries" />
   </div>
 
   <!-- Сортировка -->
@@ -54,13 +49,10 @@
 
   <!-- Список библиотек -->
   <ul class="list-group">
-    <li
-      v-for="l in filteredLibraries"
-      :key="l.id"
+    <li v-for="l in filteredLibraries" :key="l.id"
       class="list-group-item d-flex justify-content-between align-items-center"
-      :class="{ 'selected': selectedLibraries.includes(l.id) }"
-      @click="isAdmin && toggleSelection(l.id)"
-    >
+      :class="{ 'selected': isAdmin && selectedLibraries.includes(l.id) }"
+      @click="isAdmin && toggleSelection(l.id)">
       <div>{{ l.name }}</div>
 
       <!-- Кнопки (только админ) -->
@@ -75,7 +67,7 @@
     </li>
   </ul>
 
-  <!-- Модалка редактирования -->
+  <!-- Модалки -->
   <div class="modal fade" id="editLibraryModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -94,7 +86,6 @@
     </div>
   </div>
 
-  <!-- Модалка удаления одного -->
   <div class="modal fade" id="deleteLibraryModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -113,7 +104,6 @@
     </div>
   </div>
 
-  <!-- Модалка массового удаления -->
   <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -143,21 +133,19 @@ const filteredLibraries = ref([]);
 const searchQuery = ref("");
 const sortOrder = ref("asc");
 const libraryStats = ref(null);
-
 const user = ref(null);
 const isAdmin = computed(() => user.value?.is_superuser);
+const selectedLibraries = ref([]);
 
 const libraryToAdd = reactive({ name: "" });
 const libraryToEdit = reactive({ id: null, name: "", modalInstance: null });
 const libraryToDelete = reactive({ id: null, name: "" });
-const selectedLibraries = ref([]);
 
 let deleteModalInstance = null;
 let deleteSelectedModalInstance = null;
 
-// --- API ---
 async function fetchUser() {
-  const r = await axios.get("/user/info/");
+  const r = await axios.get("/userprofile/info/");
   user.value = r.data;
 }
 
@@ -170,9 +158,10 @@ async function fetchLibraries() {
 async function fetchLibraryStats() {
   const r = await axios.get("/libraries/stats/");
   libraryStats.value = r.data;
+  console.log(libraryStats.value);  // Проверка полученных данных
 }
 
-// --- Фильтр и сортировка ---
+
 function filterLibraries() {
   filteredLibraries.value = libraries.value.filter((l) =>
     l.name.toLowerCase().includes(searchQuery.value.toLowerCase())
@@ -186,7 +175,6 @@ function sortLibraries() {
   );
 }
 
-// --- Добавление ---
 async function onAddLibrary() {
   if (!libraryToAdd.name || !isAdmin.value) return;
   await axios.post("/libraries/", { ...libraryToAdd });
@@ -195,7 +183,6 @@ async function onAddLibrary() {
   await fetchLibraryStats();
 }
 
-// --- Редактирование ---
 function onEditClick(l) {
   if (!isAdmin.value) return;
   libraryToEdit.id = l.id;
@@ -220,7 +207,6 @@ function hideEditModal() {
   libraryToEdit.name = "";
 }
 
-// --- Удаление одного ---
 function onRemoveClick(l) {
   if (!isAdmin.value) return;
   libraryToDelete.id = l.id;
@@ -232,7 +218,12 @@ function onRemoveClick(l) {
 
 async function confirmDelete() {
   if (!isAdmin.value || !libraryToDelete.id) return;
-  await axios.delete(`/libraries/${libraryToDelete.id}/`);
+  const deletedId = libraryToDelete.id;
+  await axios.delete(`/libraries/${deletedId}/`);
+  
+  // Убираем удаленную библиотеку из выделенных
+  selectedLibraries.value = selectedLibraries.value.filter(id => id !== deletedId);
+  
   hideDeleteModal();
   await fetchLibraries();
   await fetchLibraryStats();
@@ -245,7 +236,6 @@ function hideDeleteModal() {
   libraryToDelete.name = "";
 }
 
-// --- Выделение ---
 function toggleSelection(id) {
   if (!isAdmin.value) return;
   if (selectedLibraries.value.includes(id)) {
@@ -255,7 +245,6 @@ function toggleSelection(id) {
   }
 }
 
-// --- Массовое удаление ---
 function showDeleteSelectedModal() {
   if (!isAdmin.value) return;
   const modal = document.getElementById("deleteSelectedModal");
@@ -277,13 +266,8 @@ async function confirmDeleteSelected() {
   await fetchLibraryStats();
 }
 
-// --- Экспорт ---
-function exportLibrariesExcel() {
-  exportData("excel");
-}
-function exportLibrariesWord() {
-  exportData("word");
-}
+function exportLibrariesExcel() { exportData("excel"); }
+function exportLibrariesWord() { exportData("word"); }
 
 function exportData(type = "excel") {
   axios({
@@ -303,7 +287,6 @@ function exportData(type = "excel") {
     .catch(() => alert("Ошибка при скачивании файла"));
 }
 
-// --- Инициализация ---
 onMounted(async () => {
   await fetchUser();
   await fetchLibraries();
@@ -320,14 +303,8 @@ onMounted(async () => {
   margin-bottom: 14px;
   font-size: 0.9em;
 }
-.stats-left {
-  display: flex;
-  gap: 12px;
-}
-.stats-right {
-  display: flex;
-  gap: 6px;
-}
+.stats-left { display: flex; gap: 12px; }
+.stats-right { display: flex; gap: 6px; }
 .stat {
   background: #fafafa;
   border: 1px solid #ddd;
@@ -335,8 +312,6 @@ onMounted(async () => {
   border-radius: 6px;
   color: #333;
 }
-
-/* Подсветка выбранных библиотек */
 .list-group-item.selected {
   background-color: #d1e7dd;
   border-color: #0f5132;
