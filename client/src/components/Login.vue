@@ -1,5 +1,15 @@
 <template>
   <div class="login-container">
+    <!-- Приветствие и GIF выше формы -->
+    <div class="welcome-container">
+      <img
+        src="https://i.pinimg.com/originals/39/70/fd/3970fd45f8264338153834f7ff18f4f0.gif"
+        alt="Приветствие"
+        class="welcome-gif mb-4"
+      />
+      <h2>Добро пожаловать! Пожалуйста, войдите в систему.</h2>
+    </div>
+
     <!-- Первый этап: логин и пароль -->
     <form v-if="!showOtpInput" @submit.prevent="handleLogin">
       <div class="form-group">
@@ -9,6 +19,7 @@
           v-model="username" 
           id="username" 
           required 
+          placeholder="Введите имя пользователя"
         />
       </div>
       <div class="form-group">
@@ -18,6 +29,7 @@
           v-model="password" 
           id="password" 
           required 
+          placeholder="Введите пароль"
         />
       </div>
       <button type="submit" :disabled="userStore.loading">
@@ -55,6 +67,7 @@
       </button>
     </form>
 
+    <!-- Сообщение об ошибке -->
     <div v-if="userStore.error" class="error-message">
       {{ userStore.error }}
     </div>
@@ -148,10 +161,31 @@ function handleBack() {
 <style scoped>
 .login-container {
   max-width: 400px;
-  margin: 50px auto;
+  margin: 0 auto; /* Убираем отступы сверху и снизу */
   padding: 20px;
   border: 1px solid #ddd;
   border-radius: 8px;
+  background-color: #fff; /* Белый фон для контейнера */
+  box-sizing: border-box;
+}
+
+.welcome-container {
+  text-align: center;
+  margin-bottom: 20px; /* Отступ снизу */
+}
+
+.welcome-gif {
+  width: 100%;
+  max-height: 250px; /* Ограничение по высоте */
+  object-fit: cover; /* Сохраняет пропорции */
+  margin-bottom: 20px; /* Отступ снизу */
+}
+
+h2 {
+  font-size: 1.5em;
+  color: #333;
+  font-weight: bold;
+  margin-top: 0; /* Убираем отступ сверху */
 }
 
 .form-group {
@@ -228,4 +262,5 @@ button:disabled {
   color: #666;
   font-size: 14px;
 }
+
 </style>

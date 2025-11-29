@@ -2,6 +2,13 @@
   <div>
     <h2>Книги</h2>
 
+    <transition name="notif-fade">
+      <div v-if="notification.visible" class="notification" :class="'notification-' + notification.type" role="status"
+        aria-live="polite">
+        {{ notification.message }}
+      </div>
+    </transition>
+
     <!-- Статистика книг -->
     <div class="stats-line">
       <div class="stats-left">
@@ -64,9 +71,8 @@
     <!-- Список книг -->
     <ul class="list-group">
       <li v-for="b in filteredBooks" :key="b.id"
-          class="list-group-item d-flex justify-content-between align-items-center"
-          :class="{ 'selected': isAdmin && selectedBooks.includes(b.id) }"
-          @click="isAdmin && toggleSelection(b.id)">
+        class="list-group-item d-flex justify-content-between align-items-center"
+        :class="{ selected: isAdmin && selectedBooks.includes(b.id) }" @click="isAdmin && toggleSelection(b.id)">
         <div>
           <strong>{{ b.title }}</strong>
           <div class="text-muted small">{{ b.genre_name }} / {{ b.library_name }}</div>
@@ -82,8 +88,8 @@
       </li>
     </ul>
 
-    <!-- Модалки редактирования и удаления (только админ) -->
-    <div v-if="isAdmin" class="modal fade" id="editBookModal" tabindex="-1">
+    <!-- Edit modal -->
+    <div class="modal fade" id="editBookModal" tabindex="-1" ref="editModalEl">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
@@ -107,7 +113,8 @@
       </div>
     </div>
 
-    <div v-if="isAdmin" class="modal fade" id="deleteBookModal" tabindex="-1">
+    <!-- Delete single modal -->
+    <div class="modal fade" id="deleteBookModal" tabindex="-1" ref="deleteModalEl">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
@@ -125,7 +132,8 @@
       </div>
     </div>
 
-    <div v-if="isAdmin" class="modal fade" id="deleteSelectedModal" tabindex="-1">
+    <!-- Delete selected modal -->
+    <div class="modal fade" id="deleteSelectedModal" tabindex="-1" ref="deleteSelectedModalEl">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
@@ -142,7 +150,6 @@
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -151,137 +158,274 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 
+// --- state ---
 const books = ref([])
 const filteredBooks = ref([])
 const bookStats = ref(null)
 const genres = ref([])
 const libraries = ref([])
 const user = ref(null)
-const isAdmin = computed(() => user.value?.is_superuser)
+const isAdmin = computed(() => !!user.value?.is_superuser)
 
-const bookToAdd = reactive({ title: '', genre: null, library: null })
-const bookToEdit = reactive({ id: null, title: '', genre: null, library: null, modalInstance: null })
+const bookToAdd = reactive({ title: '', genre: '', library: '' })
+const bookToEdit = reactive({ id: null, title: '', genre: '', library: '' })
 const bookToDelete = reactive({ id: null, title: '' })
 const selectedBooks = ref([])
-
-let deleteModalInstance = null
-let deleteSelectedModalInstance = null
 
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
-// --- API ---
-async function fetchUser() { user.value = (await axios.get('/userprofile/info/')).data }
+// notification
+const notification = reactive({
+  visible: false,
+  message: '',
+  type: 'success',
+  _timeoutId: null
+})
+
+function showNotification(msg, type = "success", duration = 2000) {
+  if (notification._timeoutId) {
+    clearTimeout(notification._timeoutId)
+    notification._timeoutId = null
+  }
+  notification.message = msg
+  notification.type = type
+  notification.visible = true
+
+  notification._timeoutId = setTimeout(() => {
+    notification.visible = false
+    notification._timeoutId = null
+  }, duration)
+}
+
+// --- modal refs ---
+const editModalEl = ref(null)
+const deleteModalEl = ref(null)
+const deleteSelectedModalEl = ref(null)
+
+let editModalInstance = null
+let deleteModalInstance = null
+let deleteSelectedModalInstance = null
+
+// --- helpers ---
+function handleApiError(err, fallbackMessage = 'Ошибка') {
+  console.error(err)
+  const msg = err?.response?.data?.detail || err?.message || fallbackMessage
+  showNotification(msg, 'danger')
+}
+
+// --- fetchers ---
+async function fetchUser() {
+  try {
+    const r = await axios.get('/userprofile/info/')
+    user.value = r.data
+  } catch (err) {
+    handleApiError(err, 'Не удалось получить информацию о пользователе')
+  }
+}
+
 async function fetchBooks() {
-  const r = await axios.get('/books/')
-books.value = r.data.map(b => ({
-  ...b,
-  genre_name: b.genre_name || (b.genre ? b.genre.name : ''),
-  library_name: b.library_name || (b.library ? b.library.name : '')
-}))
-
-  filterBooks()
+  try {
+    const r = await axios.get('/books/')
+    books.value = r.data.map(b => ({
+      ...b,
+      genre_name: b.genre_name || (b.genre ? (b.genre.name || '') : ''),
+      library_name: b.library_name || (b.library ? (b.library.name || '') : ''),
+      status: b.status || ''
+    }))
+    filterBooks()
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить список книг')
+  }
 }
-async function fetchBookStats() { bookStats.value = (await axios.get('/books/stats/')).data }
-async function fetchGenres() { genres.value = (await axios.get('/genres/')).data }
-async function fetchLibraries() { libraries.value = (await axios.get('/libraries/')).data }
 
-// --- Фильтр / сортировка ---
+async function fetchBookStats() {
+  try {
+    const r = await axios.get('/books/stats/')
+    bookStats.value = r.data
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить статистику')
+  }
+}
+
+async function fetchGenres() {
+  try {
+    const r = await axios.get('/genres/')
+    genres.value = r.data
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить жанры')
+  }
+}
+
+async function fetchLibraries() {
+  try {
+    const r = await axios.get('/libraries/')
+    libraries.value = r.data
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить библиотеки')
+  }
+}
+
+// --- фильтр/сортировка ---
 function filterBooks() {
-  // Фильтруем книги по статусу (выдача исключается)
-  filteredBooks.value = books.value.filter(b => 
-    b.title.toLowerCase().includes(searchQuery.value.toLowerCase()) && b.status !== 'borrowed'
-  );
-  sortBooks();
+  const q = searchQuery.value.trim().toLowerCase()
+  filteredBooks.value = books.value.filter(b => {
+    const matchesQ = !q || (b.title && b.title.toLowerCase().includes(q))
+    const notBorrowed = b.status !== 'borrowed'
+    return matchesQ && notBorrowed
+  })
+  sortBooks()
 }
+
 function sortBooks() {
   filteredBooks.value.sort((a, b) => {
-    const A = a.title.toLowerCase()
-    const B = b.title.toLowerCase()
+    const A = (a.title || '').toLowerCase()
+    const B = (b.title || '').toLowerCase()
     return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
   })
 }
 
-async function onBorrowBook(bookId) {
-  try {
-    await axios.put(`/books/${bookId}/`, { status: 'borrowed' });
-    // После того как книга выдана, обновляем список книг
-    await fetchBooks();  
-  } catch (error) {
-    console.error('Ошибка при выдаче книги', error);
-  }
-}
-
-
 // --- CRUD ---
 async function onAddBook() {
   if (!isAdmin.value) return
-  if (!bookToAdd.genre || !bookToAdd.library) return alert('Выберите жанр и библиотеку')
-  await axios.post('/books/', { ...bookToAdd })
-  bookToAdd.title = ''; bookToAdd.genre = null; bookToAdd.library = null
-  await fetchBooks(); await fetchBookStats()
+  if (!bookToAdd.title || !bookToAdd.genre || !bookToAdd.library) {
+    showNotification('Заполните название, жанр и библиотеку', 'warning')
+    return
+  }
+
+  try {
+    await axios.post('/books/', { title: bookToAdd.title, genre: bookToAdd.genre, library: bookToAdd.library })
+    bookToAdd.title = ''
+    bookToAdd.genre = ''
+    bookToAdd.library = ''
+    await fetchBooks()
+    await fetchBookStats()
+    showNotification('Книга добавлена', 'success')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при добавлении книги')
+  }
 }
+
 function onEditClick(b) {
   if (!isAdmin.value) return
-  bookToEdit.id = b.id; bookToEdit.title = b.title; bookToEdit.genre = b.genre; bookToEdit.library = b.library
-  const modalEl = document.getElementById('editBookModal')
-  bookToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  bookToEdit.modalInstance.show()
+  bookToEdit.id = b.id
+  bookToEdit.title = b.title || ''
+  bookToEdit.genre = b.genre && typeof b.genre === 'object' ? b.genre.id : b.genre || ''
+  bookToEdit.library = b.library && typeof b.library === 'object' ? b.library.id : b.library || ''
+
+  if (editModalEl.value) {
+    editModalInstance = bootstrap.Modal.getOrCreateInstance(editModalEl.value)
+    editModalInstance.show()
+  }
 }
+
 async function onUpdateBook() {
   if (!isAdmin.value || !bookToEdit.id) return
-  await axios.put(`/books/${bookToEdit.id}/`, { title: bookToEdit.title, genre: bookToEdit.genre, library: bookToEdit.library })
-  await fetchBooks(); await fetchBookStats(); hideEditModal()
+  try {
+    await axios.put(`/books/${bookToEdit.id}/`, {
+      title: bookToEdit.title,
+      genre: bookToEdit.genre,
+      library: bookToEdit.library
+    })
+    await fetchBooks()
+    await fetchBookStats()
+    hideEditModal()
+    showNotification('Изменения сохранены', 'warning')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при обновлении книги')
+  }
 }
+
 function hideEditModal() {
-  if (bookToEdit.modalInstance) bookToEdit.modalInstance.hide()
+  if (editModalInstance) editModalInstance.hide()
+  bookToEdit.id = null
+  bookToEdit.title = ''
+  bookToEdit.genre = ''
+  bookToEdit.library = ''
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  bookToEdit.id = null; bookToEdit.title = ''; bookToEdit.genre = null; bookToEdit.library = null
 }
+
 function onRemoveClick(b) {
   if (!isAdmin.value) return
-  bookToDelete.id = b.id; bookToDelete.title = b.title
-  const modalEl = document.getElementById('deleteBookModal')
-  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteModalInstance.show()
+  bookToDelete.id = b.id
+  bookToDelete.title = b.title || ''
+  if (deleteModalEl.value) {
+    deleteModalInstance = bootstrap.Modal.getOrCreateInstance(deleteModalEl.value)
+    deleteModalInstance.show()
+  }
 }
+
 async function confirmDelete() {
   if (!isAdmin.value || !bookToDelete.id) return
-  await axios.delete(`/books/${bookToDelete.id}/`)
-  await fetchBooks(); await fetchBookStats(); hideDeleteModal()
+  try {
+    await axios.delete(`/books/${bookToDelete.id}/`)
+    await fetchBooks()
+    await fetchBookStats()
+    hideDeleteModal()
+    showNotification('Книга удалена', 'danger')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при удалении книги')
+  }
 }
+
 function hideDeleteModal() {
   if (deleteModalInstance) deleteModalInstance.hide()
+  bookToDelete.id = null
+  bookToDelete.title = ''
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-  bookToDelete.id = null; bookToDelete.title = ''
 }
+
 function toggleSelection(id) {
   if (!isAdmin.value) return
-  if (selectedBooks.value.includes(id)) selectedBooks.value = selectedBooks.value.filter(x => x !== id)
+  const idx = selectedBooks.value.indexOf(id)
+  if (idx >= 0) selectedBooks.value.splice(idx, 1)
   else selectedBooks.value.push(id)
 }
+
 function showDeleteSelectedModal() {
   if (!isAdmin.value) return
-  const modalEl = document.getElementById('deleteSelectedModal')
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteSelectedModalInstance.show()
+  if (deleteSelectedModalEl.value) {
+    deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(deleteSelectedModalEl.value)
+    deleteSelectedModalInstance.show()
+  }
 }
+
 function hideDeleteSelectedModal() {
   if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
 }
+
 async function confirmDeleteSelected() {
   if (!isAdmin.value || !selectedBooks.value.length) return
-  await Promise.all(selectedBooks.value.map(id => axios.delete(`/books/${id}/`)))
-  selectedBooks.value = []
-  await fetchBooks(); await fetchBookStats(); hideDeleteSelectedModal()
+  try {
+    await Promise.all(selectedBooks.value.map(id => axios.delete(`/books/${id}/`)))
+    selectedBooks.value = []
+    await fetchBooks()
+    await fetchBookStats()
+    hideDeleteSelectedModal()
+    showNotification('Выбранные книги удалены', 'danger')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при удалении выбранных книг')
+  }
 }
 
 // --- Экспорт ---
-function exportBooksExcel() { if (!isAdmin.value) return exportData('excel') }
-function exportBooksWord() { if (!isAdmin.value) return exportData('word') }
+function exportBooksExcel() {
+  if (!isAdmin.value) return
+  exportData('excel')
+}
+
+function exportBooksWord() {
+  if (!isAdmin.value) return
+  exportData('word')
+}
+
 function exportData(type = 'excel') {
-  axios({ url: `/books/export/?type=${type}`, method: 'GET', responseType: 'blob' })
+  axios({
+    url: `/books/export/?type=${type}`,
+    method: 'GET',
+    responseType: 'blob'
+  })
     .then(res => {
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const link = document.createElement('a')
@@ -290,24 +434,106 @@ function exportData(type = 'excel') {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      showNotification('Файл сформирован, скачивание началось', 'success')
     })
-    .catch(() => alert('Ошибка при скачивании файла'))
+    .catch(err => {
+      handleApiError(err, 'Ошибка при скачивании файла')
+    })
 }
 
 // --- Инициализация ---
 onMounted(async () => {
-  await fetchUser()
-  await fetchGenres()
-  await fetchLibraries()
-  await fetchBooks()
-  await fetchBookStats()
+  await Promise.all([fetchUser(), fetchGenres(), fetchLibraries()])
+  await Promise.all([fetchBooks(), fetchBookStats()])
 })
 </script>
 
 <style scoped>
-.stats-line { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 0.9em; }
-.stats-left { display: flex; gap: 12px; }
-.stats-right { display: flex; gap: 6px; }
-.stat { background: #fafafa; border: 1px solid #ddd; padding: 4px 10px; border-radius: 6px; color: #333; }
-.list-group-item.selected { background-color: #d1e7dd; border-color: #0f5132; color: #0f5132; }
+.stats-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+
+.stats-left {
+  display: flex;
+  gap: 12px;
+}
+
+.stats-right {
+  display: flex;
+  gap: 6px;
+}
+
+.stat {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #333;
+}
+
+.list-group-item.selected {
+  background-color: #d1e7dd;
+  border-color: #0f5132;
+  color: #0f5132;
+}
+
+/* Notification styles */
+.notification {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  z-index: 1060;
+  font-size: 14px;
+  max-width: 90%;
+  text-align: center;
+}
+
+/* Transition for notification */
+.notif-fade-enter-active,
+.notif-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.notif-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+.notif-fade-enter-to {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notif-fade-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notif-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* bootstrap colors */
+.notification-success {
+  background: #198754;
+}
+
+.notification-danger {
+  background: #dc3545;
+}
+
+.notification-warning {
+  background: #ffc107;
+  color: #000;
+}
 </style>

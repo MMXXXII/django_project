@@ -1,6 +1,15 @@
 <template>
   <div>
     <h2>Читатели</h2>
+
+    <!-- Уведомления -->
+    <transition name="notif-fade">
+      <div v-if="notification.visible" class="notification" :class="'notification-' + notification.type" role="status"
+        aria-live="polite">
+        {{ notification.message }}
+      </div>
+    </transition>
+
     <!-- Статистика + кнопки -->
     <div class="stats-line">
       <div class="stats-left">
@@ -185,7 +194,7 @@ import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 import { useUserStore } from '../stores/userStore'
 
-
+// --- State ---
 const members = ref([])
 const filteredMembers = ref([])
 const memberStats = ref([])
@@ -199,159 +208,44 @@ const userStore = useUserStore()
 
 let deleteSelectedModalInstance = null
 
-onMounted(() => {
-  fetchMembers();
-  fetchMemberStats();
+// --- Notification ---
+const notification = reactive({
+  visible: false,
+  message: '',
+  type: 'success',
+  _timeoutId: null
 })
 
+function showNotification(msg, type = "success", duration = 2000) {
+  if (notification._timeoutId) {
+    clearTimeout(notification._timeoutId)
+    notification._timeoutId = null
+  }
+  notification.message = msg
+  notification.type = type
+  notification.visible = true
+
+  notification._timeoutId = setTimeout(() => {
+    notification.visible = false
+    notification._timeoutId = null
+  }, duration)
+}
+
+function handleApiError(err, fallbackMessage = 'Ошибка') {
+  console.error(err)
+  const msg = err?.response?.data?.detail || err?.message || fallbackMessage
+  showNotification(msg, 'danger')
+}
+
+// --- Fetchers ---
 async function fetchMembers() {
-  const response = await axios.get('/members/');
-  members.value = response.data;
-  filterMembers();
-}
-
-function filterMembers() {
-  filteredMembers.value = members.value.filter(m => m.username.toLowerCase().includes(searchQuery.value.toLowerCase()));
-  sortMembers();
-}
-
-function sortMembers() {
-  filteredMembers.value.sort((a, b) => {
-    if (sortOrder.value === 'admin_first') {
-      if (a.is_superuser && !b.is_superuser) return -1;
-      if (!a.is_superuser && b.is_superuser) return 1;
-      return a.username.toLowerCase().localeCompare(b.username.toLowerCase());
-    } else if (sortOrder.value === 'user_first') {
-      if (!a.is_superuser && b.is_superuser) return -1;
-      if (a.is_superuser && !b.is_superuser) return 1;
-      return a.username.toLowerCase().localeCompare(b.username.toLowerCase());
-    } else {
-      const A = a.username.toLowerCase();
-      const B = b.username.toLowerCase();
-      return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A);
-    }
-  });
-}
-
-function onEditClick(m) {
-  memberToEdit.id = m.id;
-  memberToEdit.username = m.username;
-  memberToEdit.email = m.email;
-  memberToEdit.age = m.age || null;
-  memberToEdit.is_superuser = m.is_superuser;
-  memberToEdit.is_staff = m.is_staff;
-  const modalEl = document.getElementById('editMemberModal');
-  const modalInstance = new bootstrap.Modal(modalEl);
-  modalInstance.show();
-}
-
-// В методе onUpdateMember, при изменении прав администратора:
-async function onUpdateMember() {
-  const formData = new FormData();
-  formData.append('username', memberToEdit.username);
-  formData.append('email', memberToEdit.email);
-  if (memberToEdit.age) formData.append('age', memberToEdit.age);
-  if (memberToEdit.password) formData.append('password', memberToEdit.password);
-  formData.append('is_superuser', memberToEdit.is_superuser);
-  formData.append('is_staff', memberToEdit.is_staff);
-
-  // Сохраняем данные на сервере
-  await axios.put(`/members/${memberToEdit.id}/`, formData);
-
-  // Обновляем состояние в Pinia Store и localStorage
-  userStore.isSuperUser = memberToEdit.is_superuser;  // Обновляем состояние в Pinia
-  localStorage.setItem('is_superuser', memberToEdit.is_superuser.toString());  // Сохраняем в localStorage
-
-  // Если права администратора утеряны, перенаправляем на страницу с ограниченным доступом
-  if (!memberToEdit.is_superuser) {
-    userStore.isSuperUser = false;  // Обновляем статус в Pinia
-    localStorage.setItem('is_superuser', 'false');  // Обновляем в localStorage
-    window.location.href = '/no-access';  // Перенаправление на страницу с ограниченным доступом
-  } else {
-    // В противном случае обновляем список пользователей
-    await fetchMembers();
-    await fetchMemberStats();
-    hideEditModal();
+  try {
+    const response = await axios.get('/members/')
+    members.value = response.data
+    filterMembers()
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить список читателей')
   }
-}
-
-
-
-
-
-function showAddModal() {
-  memberToAdd.username = '';
-  memberToAdd.email = '';
-  memberToAdd.password = '';
-  memberToAdd.age = null;
-  memberToAdd.is_superuser = false;
-  memberToAdd.is_staff = false;
-
-  const modalEl = document.getElementById('addMemberModal');
-  const modalInstance = new bootstrap.Modal(modalEl);
-  modalInstance.show();
-}
-
-async function onAddMember() {
-  const formData = new FormData();
-  formData.append('username', memberToAdd.username);
-  formData.append('email', memberToAdd.email);
-  formData.append('password', memberToAdd.password);
-  if (memberToAdd.age) formData.append('age', memberToAdd.age);
-  formData.append('is_superuser', memberToAdd.is_superuser);
-  formData.append('is_staff', memberToAdd.is_staff);
-
-  await axios.post('/members/', formData);
-  await fetchMembers();
-  await fetchMemberStats();
-  hideAddModal();
-}
-
-function onRemoveClick(m) {
-  memberToDelete.id = m.id;
-  memberToDelete.username = m.username;
-  const modalEl = document.getElementById('deleteMemberModal');
-  const modalInstance = new bootstrap.Modal(modalEl);
-  modalInstance.show();
-}
-
-async function confirmDelete() {
-  const deletedId = memberToDelete.id;
-  await axios.delete(`/members/${deletedId}/`);
-
-  // Убираем удаленного читателя из выделенных
-  selectedMembers.value = selectedMembers.value.filter(id => id !== deletedId);
-
-  await fetchMembers();
-  await fetchMemberStats();
-  hideDeleteModal();
-}
-
-function toggleSelection(id) {
-  if (selectedMembers.value.includes(id)) {
-    selectedMembers.value = selectedMembers.value.filter(x => x !== id);
-  } else {
-    selectedMembers.value.push(id);
-  }
-}
-
-function showDeleteSelectedModal() {
-  const modalEl = document.getElementById('deleteSelectedModal');
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
-  deleteSelectedModalInstance.show();
-}
-
-function hideDeleteSelectedModal() {
-  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide();
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-}
-
-async function confirmDeleteSelected() {
-  await Promise.all(selectedMembers.value.map(id => axios.delete(`/members/${id}/`)));
-  selectedMembers.value = [];
-  hideDeleteSelectedModal();
-  await fetchMembers();
-  await fetchMemberStats();
 }
 
 async function fetchMemberStats() {
@@ -360,58 +254,234 @@ async function fetchMemberStats() {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
-    });
-    memberStats.value = response.data;
+    })
+    memberStats.value = response.data
   } catch (error) {
-    console.error('Ошибка при получении данных:', error);
+    console.error('Ошибка при получении данных:', error)
     if (error.response && error.response.status === 403) {
-      router.push('/no-access'); // Если нет доступа, перенаправить
+      handleApiError(error, 'Доступ запрещен')
+    } else {
+      handleApiError(error, 'Не удалось загрузить статистику')
     }
   }
 }
 
+// --- Filter/Sort ---
+function filterMembers() {
+  filteredMembers.value = members.value.filter(m => m.username.toLowerCase().includes(searchQuery.value.toLowerCase()))
+  sortMembers()
+}
+
+function sortMembers() {
+  filteredMembers.value.sort((a, b) => {
+    if (sortOrder.value === 'admin_first') {
+      if (a.is_superuser && !b.is_superuser) return -1
+      if (!a.is_superuser && b.is_superuser) return 1
+      return a.username.toLowerCase().localeCompare(b.username.toLowerCase())
+    } else if (sortOrder.value === 'user_first') {
+      if (!a.is_superuser && b.is_superuser) return -1
+      if (a.is_superuser && !b.is_superuser) return 1
+      return a.username.toLowerCase().localeCompare(b.username.toLowerCase())
+    } else {
+      const A = a.username.toLowerCase()
+      const B = b.username.toLowerCase()
+      return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
+    }
+  })
+}
+
+// --- CRUD ---
+function showAddModal() {
+  memberToAdd.username = ''
+  memberToAdd.email = ''
+  memberToAdd.password = ''
+  memberToAdd.age = null
+  memberToAdd.is_superuser = false
+  memberToAdd.is_staff = false
+
+  const modalEl = document.getElementById('addMemberModal')
+  const modalInstance = new bootstrap.Modal(modalEl)
+  modalInstance.show()
+}
+
+async function onAddMember() {
+  try {
+    const formData = new FormData()
+    formData.append('username', memberToAdd.username)
+    formData.append('email', memberToAdd.email)
+    formData.append('password', memberToAdd.password)
+    if (memberToAdd.age) formData.append('age', memberToAdd.age)
+    formData.append('is_superuser', memberToAdd.is_superuser)
+    formData.append('is_staff', memberToAdd.is_staff)
+
+    await axios.post('/members/', formData)
+    await fetchMembers()
+    await fetchMemberStats()
+    hideAddModal()
+    showNotification('Читатель добавлен', 'success')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при добавлении читателя')
+  }
+}
+
+function onEditClick(m) {
+  memberToEdit.id = m.id
+  memberToEdit.username = m.username
+  memberToEdit.email = m.email
+  memberToEdit.age = m.age || null
+  memberToEdit.is_superuser = m.is_superuser
+  memberToEdit.is_staff = m.is_staff
+  const modalEl = document.getElementById('editMemberModal')
+  const modalInstance = new bootstrap.Modal(modalEl)
+  modalInstance.show()
+}
+
+async function onUpdateMember() {
+  try {
+    const formData = new FormData()
+    formData.append('username', memberToEdit.username)
+    formData.append('email', memberToEdit.email)
+    if (memberToEdit.age) formData.append('age', memberToEdit.age)
+    if (memberToEdit.password) formData.append('password', memberToEdit.password)
+    formData.append('is_superuser', memberToEdit.is_superuser)
+    formData.append('is_staff', memberToEdit.is_staff)
+
+    await axios.put(`/members/${memberToEdit.id}/`, formData)
+
+    userStore.isSuperUser = memberToEdit.is_superuser
+    localStorage.setItem('is_superuser', memberToEdit.is_superuser.toString())
+
+    if (!memberToEdit.is_superuser) {
+      userStore.isSuperUser = false
+      localStorage.setItem('is_superuser', 'false')
+      window.location.href = '/no-access'
+    } else {
+      await fetchMembers()
+      await fetchMemberStats()
+      hideEditModal()
+      showNotification('Изменения сохранены', 'warning')
+    }
+  } catch (err) {
+    handleApiError(err, 'Ошибка при обновлении читателя')
+  }
+}
+
+function onRemoveClick(m) {
+  memberToDelete.id = m.id
+  memberToDelete.username = m.username
+  const modalEl = document.getElementById('deleteMemberModal')
+  const modalInstance = new bootstrap.Modal(modalEl)
+  modalInstance.show()
+}
+
+async function confirmDelete() {
+  try {
+    const deletedId = memberToDelete.id
+    await axios.delete(`/members/${deletedId}/`)
+
+    selectedMembers.value = selectedMembers.value.filter(id => id !== deletedId)
+
+    await fetchMembers()
+    await fetchMemberStats()
+    hideDeleteModal()
+    showNotification('Читатель удален', 'danger')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при удалении читателя')
+  }
+}
+
+function toggleSelection(id) {
+  if (selectedMembers.value.includes(id)) {
+    selectedMembers.value = selectedMembers.value.filter((x) => x !== id)
+  } else {
+    selectedMembers.value.push(id)
+  }
+}
+
+function showDeleteSelectedModal() {
+  const modalEl = document.getElementById('deleteSelectedModal')
+  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
+  deleteSelectedModalInstance.show()
+}
+
+function hideDeleteSelectedModal() {
+  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+}
+
+async function confirmDeleteSelected() {
+  try {
+    await Promise.all(selectedMembers.value.map(id => axios.delete(`/members/${id}/`)))
+    selectedMembers.value = []
+    hideDeleteSelectedModal()
+    await fetchMembers()
+    await fetchMemberStats()
+    showNotification('Выбранные читатели удалены', 'danger')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при удалении выбранных читателей')
+  }
+}
+
+// --- Export ---
 async function exportMembersExcel() {
-  const response = await axios.get('/members/export/excel/', { responseType: 'blob' });
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', 'members.xlsx');
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  try {
+    const response = await axios.get('/members/export/excel/', { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'members.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    showNotification('Файл сформирован, скачивание началось', 'success')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при скачивании файла Excel')
+  }
 }
 
 async function exportMembersWord() {
-  const response = await axios.get('/members/export/word/', { responseType: 'blob' });
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', 'members.docx');
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  try {
+    const response = await axios.get('/members/export/word/', { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'members.docx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    showNotification('Файл сформирован, скачивание началось', 'success')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при скачивании файла Word')
+  }
 }
 
+// --- Modal Helpers ---
 function hideAddModal() {
-  const modalEl = document.getElementById('addMemberModal');
-  const modalInstance = bootstrap.Modal.getInstance(modalEl);
-  if (modalInstance) modalInstance.hide();
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+  const modalEl = document.getElementById('addMemberModal')
+  const modalInstance = bootstrap.Modal.getInstance(modalEl)
+  if (modalInstance) modalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
 }
 
 function hideEditModal() {
-  const modalEl = document.getElementById('editMemberModal');
-  const modalInstance = bootstrap.Modal.getInstance(modalEl);
-  if (modalInstance) modalInstance.hide();
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+  const modalEl = document.getElementById('editMemberModal')
+  const modalInstance = bootstrap.Modal.getInstance(modalEl)
+  if (modalInstance) modalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
 }
 
 function hideDeleteModal() {
-  const modalEl = document.getElementById('deleteMemberModal');
-  const modalInstance = bootstrap.Modal.getInstance(modalEl);
-  if (modalInstance) modalInstance.hide();
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+  const modalEl = document.getElementById('deleteMemberModal')
+  const modalInstance = bootstrap.Modal.getInstance(modalEl)
+  if (modalInstance) modalInstance.hide()
+  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
 }
+
+// --- Init ---
+onMounted(() => {
+  fetchMembers()
+  fetchMemberStats()
+})
 </script>
 
 <style scoped>
@@ -445,5 +515,61 @@ function hideDeleteModal() {
   background-color: #d1e7dd;
   border-color: #0f5132;
   color: #0f5132;
+}
+
+/* Notification styles */
+.notification {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  z-index: 1060;
+  font-size: 14px;
+  max-width: 90%;
+  text-align: center;
+}
+
+/* Transition for notification */
+.notif-fade-enter-active,
+.notif-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.notif-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+.notif-fade-enter-to {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notif-fade-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notif-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* Bootstrap colors */
+.notification-success {
+  background: #198754;
+}
+
+.notification-danger {
+  background: #dc3545;
+}
+
+.notification-warning {
+  background: #ffc107;
+  color: #000;
 }
 </style>

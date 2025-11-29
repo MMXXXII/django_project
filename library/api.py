@@ -89,9 +89,16 @@ class GenreViewSet(viewsets.ModelViewSet, BaseExportMixin):
     @action(detail=False, methods=['get'])
     def export(self, request):
         queryset = self.get_queryset()
-        data = [{'ID': g.id, 'Name': g.name, 'User': g.user.username if g.user else ''} for g in queryset]
-        return self.export_queryset(data, ['ID', 'Name', 'User'], 'Genres')
-
+        
+        # Обычные пользователи не видят, кто создал жанр
+        if request.user.is_superuser:
+            data = [{'ID': g.id, 'Name': g.name, 'User': g.user.username if g.user else ''} for g in queryset]
+            columns = ['ID', 'Name', 'User']
+        else:
+            data = [{'ID': g.id, 'Name': g.name} for g in queryset]
+            columns = ['ID', 'Name']
+            
+        return self.export_queryset(data, columns, 'Genres')
 
 
 class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
@@ -117,8 +124,6 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
             raise PermissionError("Only admins can delete libraries.")
         instance.delete()
 
-    from django.db.models import Count
-
     @action(detail=False, methods=['get'])
     def stats(self, request):
         queryset = self.get_queryset()
@@ -134,12 +139,19 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
             'top': top_name
         })
 
-
     @action(detail=False, methods=['get'])
     def export(self, request):
         queryset = self.get_queryset()
-        data = [{'ID': l.id, 'Name': l.name, 'User': l.user.username if l.user else ''} for l in queryset]
-        return self.export_queryset(data, ['ID', 'Name', 'User'], 'Libraries')
+        
+        # Обычные пользователи не видят, кто создал библиотеку
+        if request.user.is_superuser:
+            data = [{'ID': l.id, 'Name': l.name, 'User': l.user.username if l.user else ''} for l in queryset]
+            columns = ['ID', 'Name', 'User']
+        else:
+            data = [{'ID': l.id, 'Name': l.name} for l in queryset]
+            columns = ['ID', 'Name']
+            
+        return self.export_queryset(data, columns, 'Libraries')
 
 
 # ViewSet для книг
@@ -160,7 +172,7 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
         # Получаем самую популярную книгу по количеству выдач
         most_borrowed = (
             Loan.objects.values('book__id', 'book__title')
-            .annotate(borrow_count=Count('book'))  # Считаем количество выдач для каждой книги
+            .annotate(borrow_count=Count('book'))
             .order_by('-borrow_count')
             .first()
         )
@@ -176,6 +188,28 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
             'count': total_count,
             'most_borrowed': most_borrowed_book
         })
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        """Экспорт книг - только для администраторов"""
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Only administrators can export books"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        queryset = self.get_queryset()
+        data = [
+            {
+                'ID': b.id,
+                'Title': b.title,
+                'Genre': b.genre.name if b.genre else '',
+                'Library': b.library.name if b.library else '',
+                'Status': 'Available' if b.is_available else 'Borrowed'
+            }
+            for b in queryset
+        ]
+        return self.export_queryset(data, ['ID', 'Title', 'Genre', 'Library', 'Status'], 'Books')
 
 
 class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
@@ -235,7 +269,6 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
             'count': loan_count,
             'topReader': top_reader_data
         })
-
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
@@ -421,18 +454,18 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         avg_books = round(loans_count / total_count_users, 1) if total_count_users else 0
 
         return Response({
-            'count_users': total_count_users,    # Количество обычных пользователей
-            'count_admins': total_count_admins,  # Количество администраторов
-            'avg_age_users': avg_age_users,      # Средний возраст пользователей
-            'avg_age_admins': avg_age_admins,    # Средний возраст администраторов
-            'avg_books': avg_books               # Среднее количество книг на пользователя
+            'count_users': total_count_users,
+            'count_admins': total_count_admins,
+            'avg_age_users': avg_age_users,
+            'avg_age_admins': avg_age_admins,
+            'avg_books': avg_books
         })
-
-
 
     @action(detail=False, methods=['get'], url_path='export/excel')
     def export_excel(self, request):
+        """Экспорт в Excel - каждый пользователь видит только свой профиль, админ видит всех"""
         queryset = self.get_queryset()
+        
         data = [
             {
                 'ID': u.id,
@@ -447,7 +480,9 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'], url_path='export/word')
     def export_word(self, request):
+        """Экспорт в Word - каждый пользователь видит только свой профиль, админ видит всех"""
         queryset = self.get_queryset()
+        
         data = [
             {
                 'ID': u.id,
@@ -464,8 +499,7 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         query_dict['type'] = 'word'
         request.GET = query_dict
         return self.export_queryset(data, ['ID', 'Username', 'Email', 'Is Superuser', 'Is Staff'], 'Members')
-    
-# Добавьте этот класс в library/api.py после MemberViewSet
+
 
 class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
     """
@@ -522,7 +556,7 @@ class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         """Экспорт читателей"""
         queryset = self.get_queryset()
         
-        # Если пользователь не админ, скрываем имена
+        # Если пользователь не админ, скрываем имена других пользователей
         if not request.user.is_superuser:
             data = [
                 {
@@ -532,8 +566,9 @@ class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 }
                 for m in queryset
             ]
+            columns = ['ID', 'Library', 'User']
         else:
-            # Если админ, показываем имена
+            # Если админ, показываем все данные
             data = [
                 {
                     'ID': m.id,
@@ -543,5 +578,6 @@ class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 }
                 for m in queryset
             ]
+            columns = ['ID', 'Name', 'Library', 'User']
         
-        return self.export_queryset(data, ['ID', 'Name', 'Library', 'User'], 'LibraryMembers')
+        return self.export_queryset(data, columns, 'LibraryMembers')

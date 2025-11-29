@@ -1,169 +1,180 @@
 <template>
-  <h2>Выдачи</h2>
+  <div>
+    <h2>Выдачи</h2>
 
-  <!-- Статистика -->
-  <!-- Статистика -->
-  <div class="stats-line mb-3">
-    <div class="stats-left">
-      <div class="stat">Количество: {{ loanStats?.count || 0 }}</div>
-      <div class="stat">Читатель с максимальным количеством книг: {{ loanStats?.topReader?.name || 'Не найден' }}</div>
-      <div class="stat">Количество книг у этого читателя: {{ loanStats?.topReader?.loan_count || 0 }}</div>
-    </div>
-    <div class="stats-right">
-      <button class="btn btn-success btn-sm me-2" @click="exportLoans('excel')">Excel</button>
-      <button class="btn btn-primary btn-sm" @click="exportLoans('word')">Word</button>
-    </div>
-  </div>
-
-
-  <!-- Фильтр по библиотеке -->
-  <div class="mb-3">
-    <select v-model="selectedLibrary" @change="filterLoans" class="form-select">
-      <option value="">Все библиотеки</option>
-      <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
-    </select>
-  </div>
-
-  <!-- Поиск -->
-  <div class="mb-3">
-    <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по книгам или читателям"
-      @input="filterLoans" />
-  </div>
-
-  <!-- Сортировка -->
-  <div class="mb-3">
-    <select v-model="sortOrder" @change="sortLoans" class="form-select">
-      <option value="asc">От A до Я</option>
-      <option value="desc">От Я до A</option>
-    </select>
-  </div>
-
-  <!-- Форма добавления выдачи -->
-  <form class="mb-3" @submit.prevent="onAddLoan">
-    <div class="row g-2 align-items-center">
-      <div class="col">
-        <select v-model="loanToAdd.library" @change="onLibraryChange" class="form-select" required>
-          <option value="" disabled>Выберите библиотеку</option>
-          <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
-        </select>
+    <!-- Уведомления -->
+    <transition name="notif-fade">
+      <div v-if="notification.visible" class="notification" :class="'notification-' + notification.type" role="status"
+        aria-live="polite">
+        {{ notification.message }}
       </div>
-      <div class="col">
-        <select v-model="loanToAdd.book" class="form-select" required>
-          <option value="" disabled>Выберите книгу</option>
-          <option v-for="b in availableBooks" :key="b.id" :value="b.id">
-            {{ b.title }}
-          </option>
-        </select>
+    </transition>
+
+    <!-- Статистика -->
+    <div class="stats-line mb-3">
+      <div class="stats-left">
+        <div class="stat">Количество: {{ loanStats?.count || 0 }}</div>
+        <div class="stat">Читатель с максимальным количеством книг: {{ loanStats?.topReader?.name || 'Не найден' }}
+        </div>
+        <div class="stat">Количество книг у этого читателя: {{ loanStats?.topReader?.loan_count || 0 }}</div>
       </div>
-      <div class="col-auto">
-        <input type="date" v-model="loanToAdd.loan_date" class="form-control" required />
-      </div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-outline-success">Добавить</button>
+      <div class="stats-right" v-if="isAdmin">
+        <button class="btn btn-success btn-sm me-2" @click="exportLoans('excel')">Excel</button>
+        <button class="btn btn-primary btn-sm" @click="exportLoans('word')">Word</button>
       </div>
     </div>
-  </form>
 
-  <!-- Список выдач -->
-  <ul class="list-group mb-3">
-    <li v-for="l in filteredLoans" :key="l.id" class="list-group-item d-flex justify-content-between align-items-center"
-      :class="{ 'selected': selectedLoans.includes(l.id), 'returned': l.return_date }" @click="toggleSelection(l.id)">
-      <div>
-        <div>
-          <strong>{{ booksById[l.book]?.title }}</strong> →
-          {{ getMemberName(l.member) }}
-          <span v-if="l.return_date" class="badge bg-success ms-2">Возвращена {{ l.return_date }}</span>
-          <span v-else class="badge bg-warning ms-2">Выдана</span>
-        </div>
-        <div class="small text-muted">Дата выдачи: {{ l.loan_date }}</div>
-        <div class="text-muted" style="font-size: 0.85em;">
-          Библиотека: {{ getLibraryName(l.book) }}
-        </div>
-      </div>
-      <div class="d-flex gap-2">
-        <!-- Кнопка возврата для невозвращенных книг -->
-        <button v-if="!l.return_date" class="btn btn-sm btn-info" @click.stop="onReturnBook(l)">
-          <i class="bi bi-arrow-return-left"></i> Вернуть
-        </button>
+    <!-- Фильтр по библиотеке -->
+    <div class="mb-3">
+      <select v-model="selectedLibrary" @change="filterLoans" class="form-select">
+        <option value="">Все библиотеки</option>
+        <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
+      </select>
+    </div>
 
-        <button v-if="isAdmin" class="btn btn-sm btn-success" @click.stop="onEditClick(l)">
-          <i class="bi bi-pen-fill"></i>
-        </button>
-        <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
-          <i class="bi bi-x"></i>
-        </button>
-      </div>
-    </li>
-  </ul>
+    <!-- Поиск -->
+    <div class="mb-3">
+      <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по книгам или читателям"
+        @input="filterLoans" />
+    </div>
 
-  <!-- Массовое удаление для админа -->
-  <div v-if="selectedLoans.length && isAdmin" class="mb-3">
-    <button class="btn btn-danger" @click="showDeleteSelectedModal">
-      Удалить выбранные ({{ selectedLoans.length }})
-    </button>
-  </div>
+    <!-- Сортировка -->
+    <div class="mb-3">
+      <select v-model="sortOrder" @change="sortLoans" class="form-select">
+        <option value="asc">От A до Я</option>
+        <option value="desc">От Я до A</option>
+      </select>
+    </div>
 
-  <!-- Модалки (без изменений) -->
-  <div class="modal fade" id="editLoanModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content" v-if="isAdmin">
-        <div class="modal-header">
-          <h5 class="modal-title">Редактирование выдачи</h5>
-          <button type="button" class="btn-close" @click="hideEditModal"></button>
-        </div>
-        <div class="modal-body">
-          <select v-model="loanToEdit.library" @change="onEditLibraryChange" class="form-select mb-2">
+    <!-- Форма добавления выдачи -->
+    <form class="mb-3" @submit.prevent="onAddLoan">
+      <div class="row g-2 align-items-center">
+        <div class="col">
+          <select v-model="loanToAdd.library" @change="onLibraryChange" class="form-select" required>
             <option value="" disabled>Выберите библиотеку</option>
             <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
           </select>
-          <select v-model="loanToEdit.book" class="form-select mb-2">
+        </div>
+        <div class="col">
+          <select v-model="loanToAdd.book" class="form-select" required>
             <option value="" disabled>Выберите книгу</option>
-            <option v-for="b in availableEditBooks" :key="b.id" :value="b.id">{{ b.title }}</option>
+            <option v-for="b in availableBooks" :key="b.id" :value="b.id">
+              {{ b.title }}
+            </option>
           </select>
-          <select v-model="loanToEdit.member" class="form-select mb-2">
-            <option v-for="m in allLibraryMembers" :key="m.id" :value="m.id">{{ m.first_name }}</option>
-          </select>
-          <input type="date" v-model="loanToEdit.loan_date" class="form-control" />
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
-          <button type="button" class="btn btn-success" @click="onUpdateLoan">Сохранить</button>
+        <div class="col-auto">
+          <input type="date" v-model="loanToAdd.loan_date" class="form-control" required />
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-outline-success">Добавить</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Список выдач -->
+    <ul class="list-group mb-3">
+      <li v-for="l in filteredLoans" :key="l.id"
+        class="list-group-item d-flex justify-content-between align-items-center"
+        :class="{ 'selected': isAdmin && selectedLoans.includes(l.id), 'returned': l.return_date }"
+        @click="isAdmin && toggleSelection(l.id)">
+        <div>
+          <div>
+            <strong>{{ booksById[l.book]?.title }}</strong> →
+            {{ getMemberName(l.member) }}
+            <span v-if="l.return_date" class="badge bg-success ms-2">Возвращена {{ l.return_date }}</span>
+            <span v-else class="badge bg-warning ms-2">Выдана</span>
+          </div>
+          <div class="small text-muted">Дата выдачи: {{ l.loan_date }}</div>
+          <div class="text-muted" style="font-size: 0.85em;">
+            Библиотека: {{ getLibraryName(l.book) }}
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <!-- Кнопка возврата для невозвращенных книг -->
+          <button v-if="!l.return_date" class="btn btn-sm btn-info" @click.stop="onReturnBook(l)">
+            <i class="bi bi-arrow-return-left"></i> Вернуть
+          </button>
+
+          <button v-if="isAdmin" class="btn btn-sm btn-success" @click.stop="onEditClick(l)">
+            <i class="bi bi-pen-fill"></i>
+          </button>
+          <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      </li>
+    </ul>
+
+    <!-- Массовое удаление для админа -->
+    <div v-if="selectedLoans.length && isAdmin" class="mb-3">
+      <button class="btn btn-danger" @click="showDeleteSelectedModal">
+        Удалить выбранные ({{ selectedLoans.length }})
+      </button>
+    </div>
+
+    <!-- Модалки -->
+    <div class="modal fade" id="editLoanModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content" v-if="isAdmin">
+          <div class="modal-header">
+            <h5 class="modal-title">Редактирование выдачи</h5>
+            <button type="button" class="btn-close" @click="hideEditModal"></button>
+          </div>
+          <div class="modal-body">
+            <select v-model="loanToEdit.library" @change="onEditLibraryChange" class="form-select mb-2">
+              <option value="" disabled>Выберите библиотеку</option>
+              <option v-for="lib in libraries" :key="lib.id" :value="lib.id">{{ lib.name }}</option>
+            </select>
+            <select v-model="loanToEdit.book" class="form-select mb-2">
+              <option value="" disabled>Выберите книгу</option>
+              <option v-for="b in availableEditBooks" :key="b.id" :value="b.id">{{ b.title }}</option>
+            </select>
+            <select v-model="loanToEdit.member" class="form-select mb-2">
+              <option v-for="m in allLibraryMembers" :key="m.id" :value="m.id">{{ m.first_name }}</option>
+            </select>
+            <input type="date" v-model="loanToEdit.loan_date" class="form-control" />
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
+            <button type="button" class="btn btn-success" @click="onUpdateLoan">Сохранить</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="modal fade" id="deleteLoanModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content" v-if="isAdmin">
-        <div class="modal-header">
-          <h5 class="modal-title">Удаление выдачи</h5>
-          <button type="button" class="btn-close" @click="hideDeleteModal"></button>
-        </div>
-        <div class="modal-body">
-          Вы действительно хотите удалить <strong>{{ loanToDeleteDisplay }}</strong>?
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
-          <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
+    <div class="modal fade" id="deleteLoanModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content" v-if="isAdmin">
+          <div class="modal-header">
+            <h5 class="modal-title">Удаление выдачи</h5>
+            <button type="button" class="btn-close" @click="hideDeleteModal"></button>
+          </div>
+          <div class="modal-body">
+            Вы действительно хотите удалить <strong>{{ loanToDeleteDisplay }}</strong>?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
+            <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content" v-if="isAdmin">
-        <div class="modal-header">
-          <h5 class="modal-title">Удаление выбранных выдач</h5>
-          <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
-        </div>
-        <div class="modal-body">
-          Вы действительно хотите удалить <strong>{{ selectedLoans.length }}</strong> выбранных выдач?
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
-          <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
+    <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content" v-if="isAdmin">
+          <div class="modal-header">
+            <h5 class="modal-title">Удаление выбранных выдач</h5>
+            <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
+          </div>
+          <div class="modal-body">
+            Вы действительно хотите удалить <strong>{{ selectedLoans.length }}</strong> выбранных выдач?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
+            <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
+          </div>
         </div>
       </div>
     </div>
@@ -175,6 +186,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import * as bootstrap from 'bootstrap'
 
+// --- State ---
 const currentUser = reactive({ id: 0, first_name: '', role: 'user' })
 const isAdmin = computed(() => currentUser.role === 'admin')
 const currentMember = ref(null)
@@ -198,6 +210,36 @@ let deleteSelectedModalInstance = null
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
+// --- Notification ---
+const notification = reactive({
+  visible: false,
+  message: '',
+  type: 'success',
+  _timeoutId: null
+})
+
+function showNotification(msg, type = "success", duration = 2000) {
+  if (notification._timeoutId) {
+    clearTimeout(notification._timeoutId)
+    notification._timeoutId = null
+  }
+  notification.message = msg
+  notification.type = type
+  notification.visible = true
+
+  notification._timeoutId = setTimeout(() => {
+    notification.visible = false
+    notification._timeoutId = null
+  }, duration)
+}
+
+function handleApiError(err, fallbackMessage = 'Ошибка') {
+  console.error(err)
+  const msg = err?.response?.data?.detail || err?.message || fallbackMessage
+  showNotification(msg, 'danger')
+}
+
+// --- Computed ---
 const booksById = computed(() => Object.fromEntries(books.value.map(b => [b.id, b])))
 
 const loanToDeleteDisplay = computed(() => {
@@ -208,11 +250,9 @@ const loanToDeleteDisplay = computed(() => {
 
 const availableBooks = computed(() =>
   books.value.filter(b => {
-    // Фильтр по библиотеке
     if (loanToAdd.library && b.library !== Number(loanToAdd.library)) {
       return false
     }
-    // Проверяем доступность (is_available приходит с сервера)
     return b.is_available === true
   })
 )
@@ -226,6 +266,7 @@ const availableEditBooks = computed(() =>
   })
 )
 
+// --- Helpers ---
 function getMemberName(memberId) {
   const member = allLibraryMembers.value.find(m => m.id === memberId)
   if (member) return member.first_name
@@ -235,6 +276,14 @@ function getMemberName(memberId) {
   return 'Неизвестно'
 }
 
+function getLibraryName(bookId) {
+  const book = booksById.value[bookId]
+  if (!book) return ''
+  const library = libraries.value.find(lib => lib.id === book.library)
+  return library ? library.name : ''
+}
+
+// --- Fetchers ---
 async function fetchProfile() {
   try {
     const r = await axios.get('/userprofile/info/')
@@ -245,7 +294,7 @@ async function fetchProfile() {
       console.log('[Loans] User profile loaded:', currentUser)
     }
   } catch (error) {
-    console.error('[Loans] Error loading user profile:', error)
+    handleApiError(error, 'Не удалось загрузить профиль пользователя')
   }
 }
 
@@ -266,36 +315,54 @@ async function fetchCurrentMember() {
     } else {
       console.warn('[Loans] No library members found')
       if (!isAdmin.value) {
-        alert('Не найден профиль читателя. Обратитесь к администратору.')
+        showNotification('Не найден профиль читателя. Обратитесь к администратору.', 'danger', 4000)
       }
     }
   } catch (error) {
-    console.error('[Loans] Error loading library members:', error)
+    handleApiError(error, 'Не удалось загрузить читателей')
   }
 }
 
 async function fetchLibraries() {
-  libraries.value = (await axios.get('/libraries/')).data
+  try {
+    libraries.value = (await axios.get('/libraries/')).data
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить библиотеки')
+  }
 }
 
 async function fetchBooks() {
-  books.value = (await axios.get('/books/')).data
-  console.log('[Loans] Books loaded:', books.value)
+  try {
+    books.value = (await axios.get('/books/')).data
+    console.log('[Loans] Books loaded:', books.value)
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить книги')
+  }
 }
 
 async function fetchLoans() {
-  const r = await axios.get('/loans/')
-  loans.value = r.data
-  console.log('[Loans] Loans loaded:', loans.value)
-  filterLoans()
+  try {
+    const r = await axios.get('/loans/')
+    loans.value = r.data
+    console.log('[Loans] Loans loaded:', loans.value)
+    filterLoans()
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить выдачи')
+  }
 }
 
 async function fetchLoanStats() {
-  loanStats.value = (await axios.get('/loans/stats/')).data
+  try {
+    loanStats.value = (await axios.get('/loans/stats/')).data
+  } catch (err) {
+    handleApiError(err, 'Не удалось загрузить статистику')
+  }
 }
 
+// --- Watchers ---
 watch([loans, books, selectedLibrary], filterLoans, { deep: true })
 
+// --- Filter/Sort ---
 function filterLoans() {
   const query = searchQuery.value.toLowerCase()
   filteredLoans.value = loans.value.filter(l => {
@@ -318,15 +385,15 @@ function sortLoans() {
 function onLibraryChange() { loanToAdd.book = null }
 function onEditLibraryChange() { loanToEdit.book = null }
 
+// --- CRUD ---
 async function onAddLoan() {
   if (!loanToAdd.book || !loanToAdd.loan_date) {
-    alert('Заполните все поля')
+    showNotification('Заполните все поля', 'warning')
     return
   }
 
-  // Проверяем наличие профиля читателя
   if (!currentMember.value || !currentMember.value.id) {
-    alert('У вас нет профиля читателя библиотеки. Обратитесь к администратору.')
+    showNotification('У вас нет профиля читателя библиотеки. Обратитесь к администратору.', 'danger', 4000)
     console.error('[Loans] currentMember is null or has no id:', currentMember.value)
     return
   }
@@ -345,42 +412,31 @@ async function onAddLoan() {
     loanToAdd.book = null
     loanToAdd.loan_date = ''
 
-    await fetchBooks()  // Обновляем список книг для is_available
+    await fetchBooks()
     await fetchLoans()
     await fetchLoanStats()
 
-    alert('Выдача успешно добавлена!')
+    showNotification('Выдача успешно добавлена', 'success')
   } catch (error) {
     console.error('[Loans] Error adding loan:', error.response?.data || error)
-    alert(`Ошибка: ${error.response?.data?.detail || error.message}`)
+    handleApiError(error, 'Ошибка при добавлении выдачи')
   }
 }
 
-// Функция возврата книги
 async function onReturnBook(loan) {
-  if (!confirm(`Вернуть книгу "${booksById.value[loan.book]?.title}"?`)) {
-    return
-  }
-
   try {
-    // Отправляем запрос на возврат книги
     await axios.post(`/loans/${loan.id}/return/`)
 
-    // Обновляем список книг и выдач
-    await fetchBooks()  // Обновляем список книг
-    await fetchLoans()  // Обновляем список выдач
+    await fetchBooks()
+    await fetchLoans()
+    await fetchLoanStats()
 
-    // Обновляем статистику
-    await fetchLoanStats()  // Запрашиваем обновленную статистику
-
-    alert('Книга успешно возвращена!')
+    showNotification('Книга успешно возвращена', 'success')
   } catch (error) {
     console.error('[Loans] Error returning book:', error)
-    alert(`Ошибка при возврате: ${error.response?.data?.detail || error.message}`)
+    handleApiError(error, 'Ошибка при возврате книги')
   }
 }
-
-
 
 function onEditClick(l) {
   if (!isAdmin.value) return
@@ -396,15 +452,21 @@ function onEditClick(l) {
 
 async function onUpdateLoan() {
   if (!loanToEdit.id || !isAdmin.value) return
-  await axios.put(`/loans/${loanToEdit.id}/`, {
-    book: loanToEdit.book,
-    member: loanToEdit.member,
-    loan_date: loanToEdit.loan_date
-  })
-  await fetchBooks()
-  await fetchLoans()
-  await fetchLoanStats()
-  hideEditModal()
+  
+  try {
+    await axios.put(`/loans/${loanToEdit.id}/`, {
+      book: loanToEdit.book,
+      member: loanToEdit.member,
+      loan_date: loanToEdit.loan_date
+    })
+    await fetchBooks()
+    await fetchLoans()
+    await fetchLoanStats()
+    hideEditModal()
+    showNotification('Изменения сохранены', 'warning')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при обновлении выдачи')
+  }
 }
 
 function hideEditModal() {
@@ -430,11 +492,17 @@ function onRemoveClick(l) {
 
 async function confirmDelete() {
   if (!loanToDelete.id || !isAdmin.value) return
-  await axios.delete(`/loans/${loanToDelete.id}/`)
-  await fetchBooks()  // Обновляем книги после удаления выдачи
-  await fetchLoans()
-  await fetchLoanStats()
-  hideDeleteModal()
+  
+  try {
+    await axios.delete(`/loans/${loanToDelete.id}/`)
+    await fetchBooks()
+    await fetchLoans()
+    await fetchLoanStats()
+    hideDeleteModal()
+    showNotification('Выдача удалена', 'danger')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при удалении выдачи')
+  }
 }
 
 function hideDeleteModal() {
@@ -466,14 +534,21 @@ function hideDeleteSelectedModal() {
 
 async function confirmDeleteSelected() {
   if (!isAdmin.value || !selectedLoans.value.length) return
-  await Promise.all(selectedLoans.value.map(id => axios.delete(`/loans/${id}/`)))
-  selectedLoans.value = []
-  await fetchBooks()
-  await fetchLoans()
-  await fetchLoanStats()
-  hideDeleteSelectedModal()
+  
+  try {
+    await Promise.all(selectedLoans.value.map(id => axios.delete(`/loans/${id}/`)))
+    selectedLoans.value = []
+    await fetchBooks()
+    await fetchLoans()
+    await fetchLoanStats()
+    hideDeleteSelectedModal()
+    showNotification('Выбранные выдачи удалены', 'danger')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при удалении выбранных выдач')
+  }
 }
 
+// --- Export ---
 function exportLoans(type = 'excel') {
   axios({
     url: `/loans/export/?type=${type}`,
@@ -487,9 +562,13 @@ function exportLoans(type = 'excel') {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-  }).catch(err => { console.error(err); alert('Ошибка при скачивании файла') })
+    showNotification('Файл сформирован, скачивание началось', 'success')
+  }).catch(err => {
+    handleApiError(err, 'Ошибка при скачивании файла')
+  })
 }
 
+// --- Init ---
 onMounted(async () => {
   await fetchProfile()
   await Promise.all([
@@ -498,17 +577,8 @@ onMounted(async () => {
     fetchLoans(),
     fetchLoanStats()
   ])
-
   await fetchCurrentMember()
 })
-
-function getLibraryName(bookId) {
-  const book = booksById.value[bookId]
-  if (!book) return ''
-  const library = libraries.value.find(lib => lib.id === book.library)
-  return library ? library.name : ''
-}
-
 </script>
 
 <style scoped>
@@ -548,5 +618,61 @@ function getLibraryName(bookId) {
 .list-group-item.returned {
   opacity: 0.7;
   background-color: #f8f9fa;
+}
+
+/* Notification styles */
+.notification {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  z-index: 1060;
+  font-size: 14px;
+  max-width: 90%;
+  text-align: center;
+}
+
+/* Transition for notification */
+.notif-fade-enter-active,
+.notif-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.notif-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+.notif-fade-enter-to {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notif-fade-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notif-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* Bootstrap colors */
+.notification-success {
+  background: #198754;
+}
+
+.notification-danger {
+  background: #dc3545;
+}
+
+.notification-warning {
+  background: #ffc107;
+  color: #000;
 }
 </style>
