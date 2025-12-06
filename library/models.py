@@ -39,7 +39,6 @@ class Book(models.Model):
         return self.title
     
     def is_available(self):
-        """Проверяет, доступна ли книга для выдачи (не выдана или возвращена)"""
         return not Loan.objects.filter(book=self, return_date__isnull=True).exists()
 
 
@@ -73,9 +72,7 @@ class Loan(models.Model):
 
 
 class UserProfile(models.Model):
-    """
-    Расширение модели User для хранения дополнительной информации
-    """
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     age = models.IntegerField(null=True, blank=True, verbose_name='Возраст')
     

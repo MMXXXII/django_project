@@ -1,36 +1,84 @@
 <template>
-  <div class="container py-4">
-    <nav v-if="!$route.meta.hideHeader" class="mb-4 d-flex justify-content-between align-items-center">
-      <div>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/genres">Жанры</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/libraries">Библиотеки</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/books">Книги</router-link>
-        <!-- Добавляем проверку, чтобы только суперпользователь видел ссылку на читателей -->
-        <router-link v-if="userStore.isAuthenticated && userStore.isSuperUser" class="btn btn-light me-2" to="/members">Читатели</router-link>
-        <router-link v-if="userStore.isAuthenticated" class="btn btn-light me-2" to="/loans">Выдачи</router-link>
-      </div>
-
-      <div class="d-flex align-items-center gap-2" v-if="userStore.isAuthenticated">
-        <!-- Профиль -->
-        <div class="dropdown" ref="dropdownWrapper">
-          <button class="btn btn-light dropdown-toggle" type="button" @click="toggleDropdown">
-            {{ userStore.user?.username || 'Профиль' }}
-          </button>
-          <ul v-if="isOpen" class="dropdown-menu dropdown-menu-end show">
-            <li><router-link class="dropdown-item" to="/profile">Мой профиль</router-link></li>
-            <li><hr class="dropdown-divider"/></li>
-            <li><button class="dropdown-item text-danger" @click="handleLogout">Выход</button></li>
-          </ul>
+  <v-app>
+    <div class="container py-4">
+      <nav
+        v-if="!$route.meta.hideHeader"
+        class="mb-4 d-flex justify-content-between align-items-center"
+      >
+        <div>
+          <router-link
+            v-if="userStore.isAuthenticated"
+            class="btn btn-light me-2"
+            to="/genres"
+          >Жанры</router-link>
+          <router-link
+            v-if="userStore.isAuthenticated"
+            class="btn btn-light me-2"
+            to="/libraries"
+          >Библиотеки</router-link>
+          <router-link
+            v-if="userStore.isAuthenticated"
+            class="btn btn-light me-2"
+            to="/books"
+          >Книги</router-link>
+          <router-link
+            v-if="userStore.isAuthenticated && userStore.isSuperUser"
+            class="btn btn-light me-2"
+            to="/members"
+          >Читатели</router-link>
+          <router-link
+            v-if="userStore.isAuthenticated"
+            class="btn btn-light me-2"
+            to="/loans"
+          >Выдачи</router-link>
         </div>
-        <!-- Админка -->
-        <a class="btn btn-light d-flex align-items-center" href="/admin" target="_blank">Админка</a>
-      </div>
-    </nav>
-    <router-view/>
-  </div>
+
+        <div
+          class="d-flex align-items-center gap-2"
+          v-if="userStore.isAuthenticated"
+        >
+          <div class="dropdown" ref="dropdownWrapper">
+            <button
+              class="btn btn-light dropdown-toggle"
+              type="button"
+              @click="toggleDropdown"
+            >
+              {{ userStore.user?.username || 'Профиль' }}
+            </button>
+            <ul
+              v-if="isOpen"
+              class="dropdown-menu dropdown-menu-end show"
+            >
+              <li>
+                <router-link class="dropdown-item" to="/profile">
+                  Мой профиль
+                </router-link>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <button
+                  class="dropdown-item text-danger"
+                  @click="handleLogout"
+                >
+                  Выход
+                </button>
+              </li>
+            </ul>
+          </div>
+          <a
+            class="btn btn-light d-flex align-items-center"
+            href="/admin"
+            target="_blank"
+          >
+            Админка
+          </a>
+        </div>
+      </nav>
+
+      <router-view />
+    </div>
+  </v-app>
 </template>
-
-
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
@@ -42,18 +90,29 @@ const router = useRouter()
 const isOpen = ref(false)
 const dropdownWrapper = ref(null)
 
-const toggleDropdown = () => isOpen.value = !isOpen.value
-const handleClickOutside = e => dropdownWrapper.value && !dropdownWrapper.value.contains(e.target) && (isOpen.value = false)
-const handleLogout = async () => { 
-  await userStore.logout(); 
-  router.push('/login') 
+const toggleDropdown = () => {
+  isOpen.value = !isOpen.value
 }
 
-onMounted(() => { 
+const handleClickOutside = (e) => {
+  if (dropdownWrapper.value && !dropdownWrapper.value.contains(e.target)) {
+    isOpen.value = false
+  }
+}
+
+const handleLogout = async () => {
+  await userStore.logout()
+  router.push('/login')
+}
+
+onMounted(() => {
   userStore.initializeFromStorage()
-  document.addEventListener('click', handleClickOutside) 
+  document.addEventListener('click', handleClickOutside)
 })
-onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>

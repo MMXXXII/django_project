@@ -26,8 +26,6 @@ export const useUserStore = defineStore('user', {
           this.isOtpVerified = savedOtp === 'true'
           this.isSuperUser = savedSuperUser === 'true' || false
 
-          console.log('[v0] Loaded user from storage:', this.user)
-          console.log('[v0] isSuperUser from localStorage:', this.isSuperUser)
 
           return this.isAuthenticated && this.isOtpVerified
         } else {
@@ -42,18 +40,12 @@ export const useUserStore = defineStore('user', {
     async login(username, password) {
       this.loading = true
       this.error = null
-
-      console.log('[v0] Attempting login with:', { username })
-      console.log('[v0] Sending data:', { username, password: '***' })
-
       try {
 
         const response = await axios.post('/userprofile/login/', {
           username,
           password
         })
-
-        console.log('[v0] Login response:', response.data)
 
         if (response.data.is_authenticated === false && response.data.otp_sent) {
           this.user = {
@@ -66,8 +58,6 @@ export const useUserStore = defineStore('user', {
           this.isOtpVerified = false
           this.isSuperUser = this.user.is_superuser
 
-          console.log('[v0] SuperUser status:', this.isSuperUser)
-
           localStorage.setItem('user_data', JSON.stringify(this.user))
           localStorage.setItem('is_authenticated', 'false')
           localStorage.setItem('is_otp_verified', 'false')
@@ -78,11 +68,7 @@ export const useUserStore = defineStore('user', {
           this.error = response.data.error || 'Ошибка авторизации'
           throw new Error(this.error)
         }
-      } catch (error) {
-        console.error('[v0] Login error:', error)
-        console.error('[v0] Error response:', error.response?.data)
-        console.error('[v0] Error status:', error.response?.status)
-        
+      } catch (error) {       
         this.error = error.response?.data?.error || error.message || 'Ошибка авторизации'
         throw error
       } finally {
@@ -94,15 +80,12 @@ export const useUserStore = defineStore('user', {
       this.loading = true
       this.error = null
 
-      console.log('[v0] Verifying OTP:', otpKey)
 
       try {
         const response = await axios.post('/userprofile/otp-login/', {
           key: otpKey,
           username: this.pendingUsername
         })
-
-        console.log('[v0] OTP verification response:', response.data)
 
         if (response.data.success && response.data.is_authenticated) {
           this.isAuthenticated = true
@@ -122,7 +105,6 @@ export const useUserStore = defineStore('user', {
           return false
         }
       } catch (error) {
-        console.error('[v0] OTP verification error:', error)
         this.error = error.response?.data?.error || 'Ошибка проверки OTP'
         this.isOtpVerified = false
         throw error
@@ -165,7 +147,6 @@ export const useUserStore = defineStore('user', {
           await axios.post('/userprofile/logout/')
         }
       } catch (error) {
-        console.error('[v0] Logout error:', error)
       } finally {
         this.user = null
         this.isAuthenticated = false

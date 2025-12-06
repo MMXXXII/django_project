@@ -17,7 +17,6 @@ from .serializers import (
 
 
 class BaseExportMixin:
-    """Mixin для экспорта queryset в Excel или Word"""
     def export_queryset(self, queryset, columns, filename_base):
         file_type = self.request.query_params.get('type', 'excel')
 
@@ -61,23 +60,15 @@ class GenreViewSet(viewsets.ModelViewSet, BaseExportMixin):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # ВСЕ пользователи видят все жанры
         return Genre.objects.all().order_by('name')
 
     def perform_create(self, serializer):
-        # сохраняем автора только если это админ или нужно
         serializer.save(user=self.request.user)
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """
-        Статистика по жанрам:
-        - Количество жанров
-        - Самый популярный жанр (по количеству книг)
-        """
         queryset = self.get_queryset()
         total_count = queryset.count()
-        # Жанр с наибольшим количеством книг
         top_genre = Genre.objects.annotate(num_books=Count('book')).order_by('-num_books').first()
         top_name = top_genre.name if top_genre else None
 
@@ -90,7 +81,6 @@ class GenreViewSet(viewsets.ModelViewSet, BaseExportMixin):
     def export(self, request):
         queryset = self.get_queryset()
         
-        # Обычные пользователи не видят, кто создал жанр
         if request.user.is_superuser:
             data = [{'ID': g.id, 'Name': g.name, 'User': g.user.username if g.user else ''} for g in queryset]
             columns = ['ID', 'Name', 'User']
@@ -106,7 +96,6 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Все видят библиотеки
         return Library.objects.all().order_by('name')
 
     def perform_create(self, serializer):
@@ -128,8 +117,6 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
     def stats(self, request):
         queryset = self.get_queryset()
         total_count = queryset.count()
-
-        # Получаем самую используемую библиотеку по количеству выданных книг
         top_library = Library.objects.annotate(num_loans=Count('book__loan')).order_by('-num_loans').first()
 
         top_name = top_library.name if top_library else None
@@ -143,7 +130,6 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
     def export(self, request):
         queryset = self.get_queryset()
         
-        # Обычные пользователи не видят, кто создал библиотеку
         if request.user.is_superuser:
             data = [{'ID': l.id, 'Name': l.name, 'User': l.user.username if l.user else ''} for l in queryset]
             columns = ['ID', 'Name', 'User']
@@ -154,13 +140,11 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
         return self.export_queryset(data, columns, 'Libraries')
 
 
-# ViewSet для книг
 class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
     serializer_class = BookSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Все пользователи видят все книги
         return Book.objects.all()
 
     @action(detail=False, methods=['get'])
@@ -169,7 +153,6 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
         queryset = self.get_queryset()
         total_count = queryset.count()
 
-        # Получаем самую популярную книгу по количеству выдач
         most_borrowed = (
             Loan.objects.values('book__id', 'book__title')
             .annotate(borrow_count=Count('book'))
@@ -177,7 +160,6 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
             .first()
         )
 
-        # Формируем результат
         most_borrowed_book = {
             'id': most_borrowed['book__id'],
             'title': most_borrowed['book__title'],
@@ -217,12 +199,10 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Админ видит все, обычный пользователь — только свои выдачи"""
         qs = Loan.objects.select_related('book', 'member', 'user')
         if self.request.user.is_superuser:
             return qs
         
-        # Обычный пользователь видит только выдачи, где он указан как user
         return qs.filter(user=self.request.user)
 
     @action(detail=True, methods=['post'], url_path='return')
@@ -235,13 +215,10 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 {'detail': 'Книга уже возвращена.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Устанавливаем дату возврата
         from datetime import date
         loan.return_date = date.today()
         loan.save()
         
-        # Пересчитываем статистику после возврата книги
         self.update_loan_stats()
 
         serializer = self.get_serializer(loan)
@@ -251,20 +228,15 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
         })
 
     def update_loan_stats(self):
-        """Обновляем статистику после возврата книги"""
-        # Обновление статистики по всем пользователям
         top_reader = Loan.objects.filter(return_date__isnull=True).values('member__id', 'member__first_name').annotate(loan_count=Count('id')).order_by('-loan_count').first()
 
-        # Получаем данные о читателе с максимальным количеством выданных книг
         top_reader_data = {
             'name': top_reader['member__first_name'] if top_reader else None,
             'loan_count': top_reader['loan_count'] if top_reader else 0
         }
 
-        # Получаем обновленное количество всех выдач
         loan_count = Loan.objects.filter(return_date__isnull=False).count()
 
-        # Отправляем обновленную статистику
         return Response({
             'count': loan_count,
             'topReader': top_reader_data
@@ -272,13 +244,10 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Статистика по выдачам"""
         qs = self.get_queryset()
-        
-        # Общее количество выдач
+
         count = qs.count()
-        
-        # Находим читателя с максимальным количеством книг
+
         top_reader = (
             qs.values('member__id', 'member__first_name')
             .annotate(loan_count=Count('id'))
@@ -317,12 +286,7 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
         return self.export_queryset(data, ['ID', 'Book', 'Member', 'User', 'Loan Date', 'Return Date'], 'Loans')
 
 
-# ViewSet для пользователей системы (Django User) - используется на /members/
 class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
-    """
-    ViewSet для управления пользователями системы (Django User).
-    Используется на эндпоинте /members/ для авторизации в системе.
-    """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
@@ -332,9 +296,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         return User.objects.filter(id=self.request.user.id)
 
     def create(self, request, *args, **kwargs):
-        """
-        Создание нового пользователя с правильным хэшированием пароля
-        """
         username = request.data.get('username')
         email = request.data.get('email', '')
         password = request.data.get('password')
@@ -342,7 +303,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         is_staff = request.data.get('is_staff', False)
         age = request.data.get('age')
 
-        # Конвертируем строковые значения в boolean
         if isinstance(is_superuser, str):
             is_superuser = is_superuser.lower() in ('true', '1', 'yes')
         if isinstance(is_staff, str):
@@ -353,15 +313,12 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 {'error': 'Username and password are required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Проверяем, существует ли пользователь
         if User.objects.filter(username=username).exists():
             return Response(
                 {'error': 'User with this username already exists'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Используем create_user для автоматического хэширования пароля
         user = User.objects.create_user(
             username=username,
             email=email,
@@ -371,7 +328,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         user.is_staff = is_staff
         user.save()
         
-        # Создаем/обновляем профиль с возрастом
         if age:
             profile, created = UserProfile.objects.get_or_create(user=user)
             profile.age = int(age)
@@ -381,19 +337,14 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
-        """
-        Обновление пользователя с правильным хэшированием пароля
-        """
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
-        # Обновляем обычные поля
         if 'username' in request.data:
             instance.username = request.data['username']
         if 'email' in request.data:
             instance.email = request.data['email']
         
-        # Обрабатываем булевы поля
         if 'is_superuser' in request.data:
             is_superuser = request.data['is_superuser']
             if isinstance(is_superuser, str):
@@ -406,13 +357,11 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 is_staff = is_staff.lower() in ('true', '1', 'yes')
             instance.is_staff = is_staff
 
-        # Используем set_password для хэширования пароля
         if 'password' in request.data and request.data['password']:
             instance.set_password(request.data['password'])
 
         instance.save()
         
-        # Обновляем возраст в профиле
         if 'age' in request.data:
             age = request.data['age']
             if age:
@@ -425,15 +374,12 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        # Фильтруем только обычных пользователей (не администраторов)
         queryset_users = self.get_queryset().filter(is_superuser=False)
         total_count_users = queryset_users.count()
 
-        # Фильтруем только администраторов
         queryset_admins = self.get_queryset().filter(is_superuser=True)
         total_count_admins = queryset_admins.count()
 
-        # Средний возраст пользователей
         user_profiles = UserProfile.objects.filter(user__in=queryset_users, age__isnull=False)
         if user_profiles.exists():
             user_ages = [p.age for p in user_profiles if p.age]
@@ -441,7 +387,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         else:
             avg_age_users = 0
 
-        # Средний возраст администраторов
         admin_profiles = UserProfile.objects.filter(user__in=queryset_admins, age__isnull=False)
         if admin_profiles.exists():
             admin_ages = [p.age for p in admin_profiles if p.age]
@@ -449,7 +394,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         else:
             avg_age_admins = 0
 
-        # Среднее количество книг на пользователя
         loans_count = Loan.objects.filter(member__user__in=queryset_users).count()
         avg_books = round(loans_count / total_count_users, 1) if total_count_users else 0
 
@@ -463,7 +407,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'], url_path='export/excel')
     def export_excel(self, request):
-        """Экспорт в Excel - каждый пользователь видит только свой профиль, админ видит всех"""
         queryset = self.get_queryset()
         
         data = [
@@ -480,7 +423,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'], url_path='export/word')
     def export_word(self, request):
-        """Экспорт в Word - каждый пользователь видит только свой профиль, админ видит всех"""
         queryset = self.get_queryset()
         
         data = [
@@ -493,7 +435,6 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
             }
             for u in queryset
         ]
-        # Создаем копию request.query_params и меняем тип
         from django.http import QueryDict
         query_dict = request.GET.copy()
         query_dict['type'] = 'word'
@@ -502,24 +443,18 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
 
 class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
-    """
-    ViewSet для читателей библиотеки (Member из library.models).
-    """
     serializer_class = MemberSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Админ видит всех, обычный пользователь — только свой профиль"""
         queryset = Member.objects.all().select_related('user', 'library')
         
         if self.request.user.is_superuser:
             return queryset
         
-        # Обычный пользователь
         user_member = queryset.filter(user=self.request.user).first()
         
         if not user_member:
-            # Автоматически создаем Member, если его нет
             from library.models import Library
             default_library = Library.objects.first()
             
@@ -529,46 +464,39 @@ class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
                     first_name=self.request.user.username,
                     library=default_library
                 )
-                print(f'[API] Auto-created Member for user: {self.request.user.username}')
         
         return queryset.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        """Только админ может создавать читателей"""
         if not self.request.user.is_superuser:
             raise PermissionError("Only admins can add library members.")
         serializer.save()
     
     def perform_update(self, serializer):
-        """Только админ может редактировать читателей"""
         if not self.request.user.is_superuser:
             raise PermissionError("Only admins can edit library members.")
         serializer.save()
     
     def perform_destroy(self, instance):
-        """Только админ может удалять читателей"""
         if not self.request.user.is_superuser:
             raise PermissionError("Only admins can delete library members.")
         instance.delete()
 
     @action(detail=False, methods=['get'])
     def export(self, request):
-        """Экспорт читателей"""
         queryset = self.get_queryset()
         
-        # Если пользователь не админ, скрываем имена других пользователей
         if not request.user.is_superuser:
             data = [
                 {
                     'ID': m.id,
                     'Library': m.library.name if m.library else '',
-                    'User': '*****'  # скрываем имя
+                    'User': '*****'
                 }
                 for m in queryset
             ]
             columns = ['ID', 'Library', 'User']
         else:
-            # Если админ, показываем все данные
             data = [
                 {
                     'ID': m.id,

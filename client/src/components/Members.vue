@@ -1,431 +1,192 @@
-<template>
-  <div>
-    <h2>Читатели</h2>
-
-    <!-- Уведомления -->
-    <transition name="notif-fade">
-      <div v-if="notification.visible" class="notification" :class="'notification-' + notification.type" role="status"
-        aria-live="polite">
-        {{ notification.message }}
-      </div>
-    </transition>
-
-    <!-- Статистика + кнопки -->
-    <div class="stats-line">
-      <div class="stats-left">
-        <div class="stat">Читателей: {{ memberStats?.count_users || 0 }}</div>
-        <div class="stat">Администраторов: {{ memberStats?.count_admins || 0 }}</div>
-        <div class="stat">Средний возраст польз-ей: {{ memberStats?.avg_age_users || 0 }} лет</div>
-        <div class="stat">Средний возраст админ-ов: {{ memberStats?.avg_age_admins || 0 }} лет</div>
-        <div class="stat">Среднее кол-во книг, взятых читателями: {{ memberStats?.avg_books || 0 }}</div>
-      </div>
-      <div class="stats-right">
-        <button class="btn btn-success btn-sm me-2" @click="exportMembersExcel">Excel</button>
-        <button class="btn btn-primary btn-sm" @click="exportMembersWord">Word</button>
-      </div>
-    </div>
-
-    <!-- Поиск -->
-    <div class="mb-3">
-      <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по читателям"
-        @input="filterMembers" />
-    </div>
-
-    <!-- Сортировка + Кнопка Добавить -->
-    <div class="mb-3 d-flex gap-3 align-items-stretch">
-      <select v-model="sortOrder" @change="sortMembers" class="form-select flex-grow-1">
-        <option value="asc">От A до Я</option>
-        <option value="desc">От Я до A</option>
-        <option value="admin_first">Администратор → Пользователь</option>
-        <option value="user_first">Пользователь → Администратор</option>
-      </select>
-      <button class="btn btn-outline-success" @click="showAddModal" style="white-space: nowrap;">Добавить
-        читателя</button>
-    </div>
-
-    <!-- Массовое удаление -->
-    <div v-if="selectedMembers.length" class="mb-3">
-      <button class="btn btn-danger" @click="showDeleteSelectedModal">
-        Удалить выбранные ({{ selectedMembers.length }})
-      </button>
-    </div>
-
-    <!-- Список читателей -->
-    <ul class="list-group">
-      <li v-for="m in filteredMembers" :key="m.id"
-        class="list-group-item d-flex justify-content-between align-items-center"
-        :class="{ 'selected': selectedMembers.includes(m.id) }" @click="toggleSelection(m.id)">
-        <div>
-          <div class="d-flex align-items-center gap-2">
-            <strong>{{ m.username || m.first_name }}</strong>
-            <span v-if="m.is_superuser" class="badge bg-danger">Администратор</span>
-            <span v-else class="badge bg-secondary">Пользователь</span>
-          </div>
-          <div class="small text-muted">{{ m.email }}</div>
-        </div>
-        <div>
-          <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(m)">
-            <i class="bi bi-pen-fill"></i>
-          </button>
-          <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(m)">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
-      </li>
-    </ul>
-
-    <!-- Модалки -->
-    <div class="modal fade" id="addMemberModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Добавление нового читателя</h5>
-            <button type="button" class="btn-close" @click="hideAddModal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Имя пользователя</label>
-              <input v-model="memberToAdd.username" class="form-control" placeholder="Имя пользователя" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Электронная почта</label>
-              <input v-model="memberToAdd.email" class="form-control" placeholder="Электронная почта" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Возраст</label>
-              <input type="number" v-model="memberToAdd.age" class="form-control" placeholder="Возраст" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Пароль</label>
-              <input type="password" v-model="memberToAdd.password" class="form-control" placeholder="Пароль" />
-            </div>
-            <div class="mb-3">
-              <input type="checkbox" v-model="memberToAdd.is_superuser" class="form-check-input" id="addIsSuperUser" />
-              <label for="addIsSuperUser" class="form-check-label ms-2">Администратор</label>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideAddModal">Отмена</button>
-            <button type="button" class="btn btn-success" @click="onAddMember">Добавить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="editMemberModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Редактирование читателя</h5>
-            <button type="button" class="btn-close" @click="hideEditModal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Имя пользователя</label>
-              <input v-model="memberToEdit.username" class="form-control" placeholder="Имя пользователя" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Электронная почта</label>
-              <input v-model="memberToEdit.email" class="form-control" placeholder="Электронная почта" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Возраст</label>
-              <input type="number" v-model="memberToEdit.age" class="form-control" placeholder="Возраст" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Новый пароль</label>
-              <input type="password" v-model="memberToEdit.password" class="form-control" placeholder="Новый пароль" />
-            </div>
-            <div class="mb-3">
-              <input type="checkbox" v-model="memberToEdit.is_superuser" class="form-check-input"
-                id="editIsSuperUser" />
-              <label for="editIsSuperUser" class="form-check-label ms-2">Администратор</label>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
-            <button type="button" class="btn btn-success" @click="onUpdateMember">Сохранить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="deleteMemberModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление читателя</h5>
-            <button type="button" class="btn-close" @click="hideDeleteModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ memberToDelete.username }}</strong>?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление выбранных читателей</h5>
-            <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ selectedMembers.length }}</strong> выбранных читателей?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import axios from 'axios'
-import * as bootstrap from 'bootstrap'
+import { showNotification, handleApiError } from '../utils'
 import { useUserStore } from '../stores/userStore'
 
-// --- State ---
 const members = ref([])
 const filteredMembers = ref([])
-const memberStats = ref([])
-const searchQuery = ref('')
-const sortOrder = ref('asc')
-const selectedMembers = ref([])
-const memberToAdd = reactive({ username: '', email: '', password: '', age: null, is_superuser: false, is_staff: false })
-const memberToEdit = reactive({ id: null, username: '', email: '', password: '', age: null, is_superuser: false, is_staff: false })
-const memberToDelete = reactive({ id: null, username: '' })
+const memberStats = ref(null)
 const userStore = useUserStore()
 
-let deleteSelectedModalInstance = null
+const searchQuery = ref('')
 
-// --- Notification ---
+const isAdmin = computed(() => userStore.isSuperUser)
+
 const notification = reactive({
   visible: false,
   message: '',
   type: 'success',
-  _timeoutId: null
+  _timeoutId: null,
 })
 
-function showNotification(msg, type = "success", duration = 2000) {
-  if (notification._timeoutId) {
-    clearTimeout(notification._timeoutId)
-    notification._timeoutId = null
-  }
-  notification.message = msg
-  notification.type = type
-  notification.visible = true
+const showAddDialog = ref(false)
+const showEditDialog = ref(false)
+const showDeleteDialog = ref(false)
 
-  notification._timeoutId = setTimeout(() => {
-    notification.visible = false
-    notification._timeoutId = null
-  }, duration)
-}
+const headers = [
+  { title: 'Имя', value: 'username' },
+  { title: 'Email', value: 'email' },
+  { title: 'Возраст', value: 'age' },
+  { title: 'Роль', value: 'role' },
+  { title: 'Действия', value: 'actions', align: 'end' },
+]
 
-function handleApiError(err, fallbackMessage = 'Ошибка') {
-  console.error(err)
-  const msg = err?.response?.data?.detail || err?.message || fallbackMessage
-  showNotification(msg, 'danger')
-}
+const memberToAdd = reactive({
+  username: '',
+  email: '',
+  password: '',
+  age: null,
+  is_superuser: false,
+  is_staff: false,
+})
 
-// --- Fetchers ---
-async function fetchMembers() {
+const memberToEdit = reactive({
+  id: null,
+  username: '',
+  email: '',
+  password: '',
+  age: null,
+  is_superuser: false,
+  is_staff: false,
+})
+
+const memberToDelete = reactive({
+  id: null,
+  username: '',
+})
+
+async function loadMembers() {
   try {
-    const response = await axios.get('/members/')
-    members.value = response.data
-    filterMembers()
+    const r = await axios.get('/members/')
+    members.value = r.data
+    applyFilter()
   } catch (err) {
-    handleApiError(err, 'Не удалось загрузить список читателей')
+    handleApiError(err, 'Не удалось загрузить список читателей', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
   }
 }
 
-async function fetchMemberStats() {
+async function loadMemberStats() {
   try {
-    const response = await axios.get('/members/stats/', {
+    const r = await axios.get('/members/stats/', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     })
-    memberStats.value = response.data
-  } catch (error) {
-    console.error('Ошибка при получении данных:', error)
-    if (error.response && error.response.status === 403) {
-      handleApiError(error, 'Доступ запрещен')
-    } else {
-      handleApiError(error, 'Не удалось загрузить статистику')
-    }
-  }
-}
-
-// --- Filter/Sort ---
-function filterMembers() {
-  filteredMembers.value = members.value.filter(m => m.username.toLowerCase().includes(searchQuery.value.toLowerCase()))
-  sortMembers()
-}
-
-function sortMembers() {
-  filteredMembers.value.sort((a, b) => {
-    if (sortOrder.value === 'admin_first') {
-      if (a.is_superuser && !b.is_superuser) return -1
-      if (!a.is_superuser && b.is_superuser) return 1
-      return a.username.toLowerCase().localeCompare(b.username.toLowerCase())
-    } else if (sortOrder.value === 'user_first') {
-      if (!a.is_superuser && b.is_superuser) return -1
-      if (a.is_superuser && !b.is_superuser) return 1
-      return a.username.toLowerCase().localeCompare(b.username.toLowerCase())
-    } else {
-      const A = a.username.toLowerCase()
-      const B = b.username.toLowerCase()
-      return sortOrder.value === 'asc' ? A.localeCompare(B) : B.localeCompare(A)
-    }
-  })
-}
-
-// --- CRUD ---
-function showAddModal() {
-  memberToAdd.username = ''
-  memberToAdd.email = ''
-  memberToAdd.password = ''
-  memberToAdd.age = null
-  memberToAdd.is_superuser = false
-  memberToAdd.is_staff = false
-
-  const modalEl = document.getElementById('addMemberModal')
-  const modalInstance = new bootstrap.Modal(modalEl)
-  modalInstance.show()
-}
-
-async function onAddMember() {
-  try {
-    const formData = new FormData()
-    formData.append('username', memberToAdd.username)
-    formData.append('email', memberToAdd.email)
-    formData.append('password', memberToAdd.password)
-    if (memberToAdd.age) formData.append('age', memberToAdd.age)
-    formData.append('is_superuser', memberToAdd.is_superuser)
-    formData.append('is_staff', memberToAdd.is_staff)
-
-    await axios.post('/members/', formData)
-    await fetchMembers()
-    await fetchMemberStats()
-    hideAddModal()
-    showNotification('Читатель добавлен', 'success')
+    memberStats.value = r.data
   } catch (err) {
-    handleApiError(err, 'Ошибка при добавлении читателя')
+    handleApiError(err, 'Не удалось загрузить статистику', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
   }
 }
 
-function onEditClick(m) {
-  memberToEdit.id = m.id
-  memberToEdit.username = m.username
-  memberToEdit.email = m.email
-  memberToEdit.age = m.age || null
-  memberToEdit.is_superuser = m.is_superuser
-  memberToEdit.is_staff = m.is_staff
-  const modalEl = document.getElementById('editMemberModal')
-  const modalInstance = new bootstrap.Modal(modalEl)
-  modalInstance.show()
+function applyFilter() {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) {
+    filteredMembers.value = members.value.slice()
+    return
+  }
+  filteredMembers.value = members.value.filter(m => 
+    (m.username || '').toLowerCase().includes(q)
+  )
 }
 
-async function onUpdateMember() {
+async function addMember() {
+  if (!isAdmin.value) return
+
+  if (!memberToAdd.username || !memberToAdd.email || !memberToAdd.password) {
+    showNotification(notification, 'Заполните имя, email и пароль', 'warning')
+    return
+  }
+
   try {
-    const formData = new FormData()
-    formData.append('username', memberToEdit.username)
-    formData.append('email', memberToEdit.email)
-    if (memberToEdit.age) formData.append('age', memberToEdit.age)
-    if (memberToEdit.password) formData.append('password', memberToEdit.password)
-    formData.append('is_superuser', memberToEdit.is_superuser)
-    formData.append('is_staff', memberToEdit.is_staff)
+    await axios.post('/members/', memberToAdd)
+    memberToAdd.username = ''
+    memberToAdd.email = ''
+    memberToAdd.password = ''
+    memberToAdd.age = null
+    memberToAdd.is_superuser = false
+    memberToAdd.is_staff = false
+    showAddDialog.value = false
+    await loadMembers()
+    await loadMemberStats()
+    showNotification(notification, 'Читатель добавлен', 'success')
+  } catch (err) {
+    handleApiError(err, 'Ошибка при добавлении читателя', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
+  }
+}
 
-    await axios.put(`/members/${memberToEdit.id}/`, formData)
+function openEditDialog(member) {
+  if (!isAdmin.value) return
+  memberToEdit.id = member.id
+  memberToEdit.username = member.username || ''
+  memberToEdit.email = member.email || ''
+  memberToEdit.age = member.age || null
+  memberToEdit.is_superuser = member.is_superuser || false
+  memberToEdit.is_staff = member.is_staff || false
+  memberToEdit.password = ''
+  showEditDialog.value = true
+}
 
-    userStore.isSuperUser = memberToEdit.is_superuser
-    localStorage.setItem('is_superuser', memberToEdit.is_superuser.toString())
+async function updateMember() {
+  if (!isAdmin.value || !memberToEdit.id) return
 
-    if (!memberToEdit.is_superuser) {
+  try {
+    await axios.put(`/members/${memberToEdit.id}/`, memberToEdit)
+
+    if (!memberToEdit.is_superuser && userStore.isSuperUser) {
       userStore.isSuperUser = false
       localStorage.setItem('is_superuser', 'false')
       window.location.href = '/no-access'
-    } else {
-      await fetchMembers()
-      await fetchMemberStats()
-      hideEditModal()
-      showNotification('Изменения сохранены', 'warning')
+      return
     }
+
+    showEditDialog.value = false
+    await loadMembers()
+    await loadMemberStats()
+    showNotification(notification, 'Изменения сохранены', 'warning')
   } catch (err) {
-    handleApiError(err, 'Ошибка при обновлении читателя')
+    handleApiError(err, 'Ошибка при обновлении читателя', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
   }
 }
 
-function onRemoveClick(m) {
-  memberToDelete.id = m.id
-  memberToDelete.username = m.username
-  const modalEl = document.getElementById('deleteMemberModal')
-  const modalInstance = new bootstrap.Modal(modalEl)
-  modalInstance.show()
+function openDeleteDialog(member) {
+  if (!isAdmin.value) return
+  memberToDelete.id = member.id
+  memberToDelete.username = member.username || ''
+  showDeleteDialog.value = true
 }
 
-async function confirmDelete() {
+async function deleteMember() {
+  if (!isAdmin.value || !memberToDelete.id) return
+
   try {
-    const deletedId = memberToDelete.id
-    await axios.delete(`/members/${deletedId}/`)
-
-    selectedMembers.value = selectedMembers.value.filter(id => id !== deletedId)
-
-    await fetchMembers()
-    await fetchMemberStats()
-    hideDeleteModal()
-    showNotification('Читатель удален', 'danger')
+    await axios.delete(`/members/${memberToDelete.id}/`)
+    showDeleteDialog.value = false
+    await loadMembers()
+    await loadMemberStats()
+    showNotification(notification, 'Читатель удалён', 'danger')
   } catch (err) {
-    handleApiError(err, 'Ошибка при удалении читателя')
+    handleApiError(err, 'Ошибка при удалении читателя', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
   }
 }
 
-function toggleSelection(id) {
-  if (selectedMembers.value.includes(id)) {
-    selectedMembers.value = selectedMembers.value.filter((x) => x !== id)
-  } else {
-    selectedMembers.value.push(id)
-  }
-}
+async function exportExcel() {
+  if (!isAdmin.value) return
 
-function showDeleteSelectedModal() {
-  const modalEl = document.getElementById('deleteSelectedModal')
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl)
-  deleteSelectedModalInstance.show()
-}
-
-function hideDeleteSelectedModal() {
-  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-}
-
-async function confirmDeleteSelected() {
   try {
-    await Promise.all(selectedMembers.value.map(id => axios.delete(`/members/${id}/`)))
-    selectedMembers.value = []
-    hideDeleteSelectedModal()
-    await fetchMembers()
-    await fetchMemberStats()
-    showNotification('Выбранные читатели удалены', 'danger')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении выбранных читателей')
-  }
-}
-
-// --- Export ---
-async function exportMembersExcel() {
-  try {
-    const response = await axios.get('/members/export/excel/', { responseType: 'blob' })
+    const response = await axios.get('/members/export/excel/', {
+      responseType: 'blob'
+    })
     const url = window.URL.createObjectURL(new Blob([response.data]))
     const link = document.createElement('a')
     link.href = url
@@ -433,15 +194,20 @@ async function exportMembersExcel() {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    showNotification('Файл сформирован, скачивание началось', 'success')
   } catch (err) {
-    handleApiError(err, 'Ошибка при скачивании файла Excel')
+    handleApiError(err, 'Ошибка при экспорте в Excel', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
   }
 }
 
-async function exportMembersWord() {
+async function exportWord() {
+  if (!isAdmin.value) return
+
   try {
-    const response = await axios.get('/members/export/word/', { responseType: 'blob' })
+    const response = await axios.get('/members/export/word/', {
+      responseType: 'blob'
+    })
     const url = window.URL.createObjectURL(new Blob([response.data]))
     const link = document.createElement('a')
     link.href = url
@@ -449,127 +215,269 @@ async function exportMembersWord() {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    showNotification('Файл сформирован, скачивание началось', 'success')
   } catch (err) {
-    handleApiError(err, 'Ошибка при скачивании файла Word')
+    handleApiError(err, 'Ошибка при экспорте в Word', (msg, type = 'danger') =>
+      showNotification(notification, msg, type),
+    )
   }
 }
 
-// --- Modal Helpers ---
-function hideAddModal() {
-  const modalEl = document.getElementById('addMemberModal')
-  const modalInstance = bootstrap.Modal.getInstance(modalEl)
-  if (modalInstance) modalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-}
-
-function hideEditModal() {
-  const modalEl = document.getElementById('editMemberModal')
-  const modalInstance = bootstrap.Modal.getInstance(modalEl)
-  if (modalInstance) modalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-}
-
-function hideDeleteModal() {
-  const modalEl = document.getElementById('deleteMemberModal')
-  const modalInstance = bootstrap.Modal.getInstance(modalEl)
-  if (modalInstance) modalInstance.hide()
-  document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
-}
-
-// --- Init ---
-onMounted(() => {
-  fetchMembers()
-  fetchMemberStats()
+onMounted(async () => {
+  await loadMembers()
+  await loadMemberStats()
 })
 </script>
 
-<style scoped>
-.stats-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  font-size: 0.9em;
-}
+<template>
+  <v-container fluid>
+    <v-row>
+      <v-col cols="12">
+        <v-card class="pa-4" elevation="2">
+          <div class="d-flex justify-space-between align-center mb-4">
+            <div>
+              <h2 class="mb-1">Читатели</h2>
+              <div class="text-body-2 text-medium-emphasis">
+                Всего: {{ memberStats?.count_users || 0 }},
+                админов: {{ memberStats?.count_admins || 0 }}
+              </div>
+            </div>
 
-.stats-left {
-  display: flex;
-  gap: 12px;
-}
+            <div class="d-flex gap-2" v-if="isAdmin">
+              <v-btn
+                color="success"
+                variant="outlined"
+                @click="exportExcel"
+                prepend-icon="mdi-microsoft-excel"
+              >
+                Excel
+              </v-btn>
+              <v-btn
+                color="indigo"
+                variant="outlined"
+                @click="exportWord"
+                prepend-icon="mdi-file-word"
+              >
+                Word
+              </v-btn>
+            </div>
+          </div>
 
-.stats-right {
-  display: flex;
-  gap: 6px;
-}
+          <v-alert
+            v-if="notification.visible"
+            :type="notification.type"
+            class="mb-4"
+            variant="tonal"
+            closable
+          >
+            {{ notification.message }}
+          </v-alert>
 
-.stat {
-  background: #fafafa;
-  border: 1px solid #ddd;
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: #333;
-}
+          <v-row class="mb-4" align="center">
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="searchQuery"
+                label="Поиск по читателям"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                prepend-inner-icon="mdi-magnify"
+                @input="applyFilter"
+              />
+            </v-col>
+            <v-col cols="12" md="6" class="d-flex justify-end">
+              <v-btn
+                v-if="isAdmin"
+                color="primary"
+                prepend-icon="mdi-plus"
+                @click="showAddDialog = true"
+              >
+                Добавить читателя
+              </v-btn>
+            </v-col>
+          </v-row>
 
-.list-group-item.selected {
-  background-color: #d1e7dd;
-  border-color: #0f5132;
-  color: #0f5132;
-}
+          <v-data-table
+            :headers="headers"
+            :items="filteredMembers"
+            item-key="id"
+            :items-per-page="10"
+            class="elevation-1"
+          >
+            <template #item.role="{ item }">
+              <v-chip
+                :color="item.is_superuser ? 'error' : 'secondary'"
+                variant="flat"
+                size="small"
+              >
+                {{ item.is_superuser ? 'Администратор' : 'Читатель' }}
+              </v-chip>
+            </template>
 
-/* Notification styles */
-.notification {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  z-index: 1060;
-  font-size: 14px;
-  max-width: 90%;
-  text-align: center;
-}
+            <template #item.actions="{ item }">
+              <div v-if="isAdmin">
+                <v-btn
+                  variant="text"
+                  color="primary"
+                  prepend-icon="mdi-pencil"
+                  @click="openEditDialog(item)"
+                >
+                </v-btn>
+                <v-btn
+                  variant="text"
+                  color="error"
+                  prepend-icon="mdi-delete"
+                  @click="openDeleteDialog(item)"
+                >
+                </v-btn>
+              </div>
+            </template>
 
-/* Transition for notification */
-.notif-fade-enter-active,
-.notif-fade-leave-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
+            <template #no-data>
+              <div class="text-center pa-6">
+                <div class="mb-2">Нет читателей</div>
+                <div class="text-body-2 mb-3">
+                  Добавьте первого читателя, чтобы начать.
+                </div>
+                <v-btn
+                  v-if="isAdmin"
+                  color="primary"
+                  prepend-icon="mdi-plus"
+                  @click="showAddDialog = true"
+                >
+                  Добавить читателя
+                </v-btn>
+              </div>
+            </template>
+          </v-data-table>
+        </v-card>
+      </v-col>
+    </v-row>
 
-.notif-fade-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
+    <!-- Диалог добавления -->
+    <v-dialog v-if="isAdmin" v-model="showAddDialog" max-width="520">
+      <v-card>
+        <v-card-title>Добавить читателя</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="memberToAdd.username"
+            label="Имя пользователя"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-text-field
+            v-model="memberToAdd.email"
+            label="Email"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-text-field
+            v-model="memberToAdd.password"
+            label="Пароль"
+            type="password"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-text-field
+            v-model.number="memberToAdd.age"
+            label="Возраст"
+            type="number"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-switch
+            v-model="memberToAdd.is_superuser"
+            label="Сделать администратором"
+            color="primary"
+            inset
+          />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showAddDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="primary" @click="addMember">
+            Добавить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-.notif-fade-enter-to {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
+    <!-- Диалог редактирования -->
+    <v-dialog v-if="isAdmin" v-model="showEditDialog" max-width="520">
+      <v-card>
+        <v-card-title>Редактировать читателя</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="memberToEdit.username"
+            label="Имя пользователя"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-text-field
+            v-model="memberToEdit.email"
+            label="Email"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-text-field
+            v-model="memberToEdit.password"
+            label="Новый пароль (оставьте пустым, чтобы не менять)"
+            type="password"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-text-field
+            v-model.number="memberToEdit.age"
+            label="Возраст"
+            type="number"
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <v-switch
+            v-model="memberToEdit.is_superuser"
+            label="Администратор"
+            color="primary"
+            inset
+          />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showEditDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="primary" @click="updateMember">
+            Сохранить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-.notif-fade-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.notif-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
-
-/* Bootstrap colors */
-.notification-success {
-  background: #198754;
-}
-
-.notification-danger {
-  background: #dc3545;
-}
-
-.notification-warning {
-  background: #ffc107;
-  color: #000;
-}
-</style>
+    <!-- Диалог удаления -->
+    <v-dialog v-if="isAdmin" v-model="showDeleteDialog" max-width="420">
+      <v-card>
+        <v-card-title class="text-h6">
+          Удалить читателя
+        </v-card-title>
+        <v-card-text>
+          Вы уверены, что хотите удалить читателя
+          <strong>{{ memberToDelete.username }}</strong>?
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showDeleteDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="error" @click="deleteMember">
+            Удалить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-container>
+</template>

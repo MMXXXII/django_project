@@ -1,465 +1,411 @@
-<template>
-  <div>
-    <h2>Жанры</h2>
-
-    <!-- Уведомления -->
-    <transition name="notif-fade">
-      <div v-if="notification.visible" class="notification" :class="'notification-' + notification.type" role="status"
-        aria-live="polite">
-        {{ notification.message }}
-      </div>
-    </transition>
-
-    <!-- Статистика -->
-    <div class="stats-line">
-      <div class="stats-left">
-        <div class="stat">Количество жанров: {{ genreStats?.count || 0 }}</div>
-        <div class="stat">Самый используемый жанр: {{ genreStats?.top || "нет данных" }}</div>
-      </div>
-
-      <div class="stats-right" v-if="isAdmin">
-        <button class="btn btn-success btn-sm me-2" @click="exportGenresExcel">Excel</button>
-        <button class="btn btn-primary btn-sm" @click="exportGenresWord">Word</button>
-      </div>
-    </div>
-
-    <!-- Поиск -->
-    <div class="mb-3">
-      <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по жанрам"
-        @input="filterGenres" />
-    </div>
-
-    <!-- Сортировка -->
-    <div class="mb-3">
-      <select v-model="sortOrder" @change="sortGenres" class="form-select">
-        <option value="asc">От A до Я</option>
-        <option value="desc">От Я до A</option>
-      </select>
-    </div>
-
-    <!-- Добавление Жанра (только админ) -->
-    <form v-if="isAdmin" class="mb-3" @submit.prevent="onAddGenre">
-      <div class="row g-2 align-items-center">
-        <div class="col">
-          <input v-model="genreToAdd.name" class="form-control" placeholder="Название жанра" required />
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-outline-success">Добавить</button>
-        </div>
-      </div>
-    </form>
-
-    <!-- Массовое удаление (только админ) -->
-    <div v-if="isAdmin && selectedGenres.length" class="mb-3">
-      <button class="btn btn-danger" @click="showDeleteSelectedModal">
-        Удалить выбранные ({{ selectedGenres.length }})
-      </button>
-    </div>
-
-    <!-- Список жанров -->
-    <ul class="list-group">
-      <li v-for="g in filteredGenres" :key="g.id"
-        class="list-group-item d-flex justify-content-between align-items-center"
-        :class="{ 'selected': isAdmin && selectedGenres.includes(g.id) }" @click="isAdmin && toggleSelection(g.id)">
-        <div>{{ g.name }}</div>
-
-        <!-- Кнопки (только админ) -->
-        <div v-if="isAdmin">
-          <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(g)">
-            <i class="bi bi-pen-fill"></i>
-          </button>
-          <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(g)">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
-      </li>
-    </ul>
-
-    <!-- Модалки -->
-    <div class="modal fade" id="editGenreModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Редактирование жанра</h5>
-            <button type="button" class="btn-close" @click="hideEditModal"></button>
-          </div>
-          <div class="modal-body">
-            <input v-model="genreToEdit.name" class="form-control" placeholder="Название жанра" />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
-            <button type="button" class="btn btn-success" @click="onUpdateGenre">Сохранить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="deleteGenreModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление жанра</h5>
-            <button type="button" class="btn-close" @click="hideDeleteModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ genreToDelete.name }}</strong>?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление выбранных жанров</h5>
-            <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ selectedGenres.length }}</strong> жанров?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
-import axios from "axios";
-import * as bootstrap from "bootstrap";
+import { ref, reactive, onMounted, computed } from 'vue'
+import axios from 'axios'
+import { showNotification, handleApiError } from '../utils'
 
-const genres = ref([]);
-const filteredGenres = ref([]);
-const searchQuery = ref("");
-const sortOrder = ref("asc");
-const genreStats = ref(null);
-const user = ref(null);
-const isAdmin = computed(() => user.value?.is_superuser);
-const selectedGenres = ref([]);
+// данные
+const genres = ref([])
+const filteredGenres = ref([])
+const genreStats = ref(null)
+const user = ref(null)
 
-const genreToAdd = reactive({ name: "" });
-const genreToEdit = reactive({ id: null, name: "", modalInstance: null });
-const genreToDelete = reactive({ id: null, name: "" });
+// состояние формы и интерфейса
+const searchQuery = ref('')
+const sortOrder = ref('asc')
 
-let deleteModalInstance = null;
-let deleteSelectedModalInstance = null;
+const isAdmin = computed(() => !!user.value?.is_superuser)
 
-// Notification
 const notification = reactive({
   visible: false,
   message: '',
   type: 'success',
-  _timeoutId: null
-});
+  _timeoutId: null,
+})
 
-function showNotification(msg, type = "success", duration = 2000) {
-  if (notification._timeoutId) {
-    clearTimeout(notification._timeoutId);
-    notification._timeoutId = null;
-  }
-  notification.message = msg;
-  notification.type = type;
-  notification.visible = true;
+const showEditDialog = ref(false)
+const showDeleteDialog = ref(false)
 
-  notification._timeoutId = setTimeout(() => {
-    notification.visible = false;
-    notification._timeoutId = null;
-  }, duration);
-}
+const genreToAdd = reactive({
+  name: '',
+})
 
-function handleApiError(err, fallbackMessage = 'Ошибка') {
-  console.error(err);
-  const msg = err?.response?.data?.detail || err?.message || fallbackMessage;
-  showNotification(msg, 'danger');
-}
+const genreToEdit = reactive({
+  id: null,
+  name: '',
+})
 
-async function fetchUser() {
+const genreToDelete = reactive({
+  id: null,
+  name: '',
+})
+
+// загрузка пользователя
+async function loadUser() {
   try {
-    const r = await axios.get("/userprofile/info/");
-    user.value = r.data;
+    const r = await axios.get('/userprofile/info/')
+    user.value = r.data
   } catch (err) {
-    handleApiError(err, 'Не удалось получить информацию о пользователе');
+    handleApiError(
+      err,
+      'Не удалось получить информацию о пользователе',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
   }
 }
 
-async function fetchGenres() {
+// загрузка жанров
+async function loadGenres() {
   try {
-    const r = await axios.get("/genres/");
-    genres.value = r.data;
-    filterGenres();
+    const r = await axios.get('/genres/')
+    genres.value = r.data
+    applyFilter()
   } catch (err) {
-    handleApiError(err, 'Не удалось загрузить список жанров');
+    handleApiError(
+      err,
+      'Не удалось загрузить список жанров',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
   }
 }
 
-async function fetchGenreStats() {
+// загрузка статистики
+async function loadGenreStats() {
   try {
-    const r = await axios.get("/genres/stats/");
-    genreStats.value = r.data;
+    const r = await axios.get('/genres/stats/')
+    genreStats.value = r.data
   } catch (err) {
-    handleApiError(err, 'Не удалось загрузить статистику');
+    handleApiError(
+      err,
+      'Не удалось загрузить статистику',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
   }
 }
 
-function filterGenres() {
-  filteredGenres.value = genres.value.filter((g) =>
-    g.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-  );
-  sortGenres();
-}
+// фильтрация и сортировка
+function applyFilter() {
+  const q = searchQuery.value.trim().toLowerCase()
 
-function sortGenres() {
-  filteredGenres.value.sort((a, b) =>
-    sortOrder.value === "asc"
-      ? a.name.localeCompare(b.name)
-      : b.name.localeCompare(a.name)
-  );
-}
+  let list = genres.value
 
-async function onAddGenre() {
-  if (!genreToAdd.name || !isAdmin.value) return;
-  
-  try {
-    await axios.post("/genres/", { ...genreToAdd });
-    genreToAdd.name = "";
-    await fetchGenres();
-    await fetchGenreStats();
-    showNotification('Жанр добавлен', 'success');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при добавлении жанра');
+  if (q) {
+    list = list.filter((g) => (g.name || '').toLowerCase().includes(q))
   }
-}
 
-function onEditClick(g) {
-  if (!isAdmin.value) return;
-  genreToEdit.id = g.id;
-  genreToEdit.name = g.name;
-  const modal = document.getElementById("editGenreModal");
-  genreToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-  genreToEdit.modalInstance.show();
-}
-
-async function onUpdateGenre() {
-  if (!isAdmin.value || !genreToEdit.id) return;
-  
-  try {
-    await axios.put(`/genres/${genreToEdit.id}/`, { name: genreToEdit.name });
-    hideEditModal();
-    await fetchGenres();
-    await fetchGenreStats();
-    showNotification('Изменения сохранены', 'warning');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при обновлении жанра');
-  }
-}
-
-function hideEditModal() {
-  if (genreToEdit.modalInstance) genreToEdit.modalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-  genreToEdit.id = null;
-  genreToEdit.name = "";
-}
-
-function onRemoveClick(g) {
-  if (!isAdmin.value) return;
-  genreToDelete.id = g.id;
-  genreToDelete.name = g.name;
-  const modal = document.getElementById("deleteGenreModal");
-  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-  deleteModalInstance.show();
-}
-
-async function confirmDelete() {
-  if (!isAdmin.value || !genreToDelete.id) return;
-  
-  try {
-    const deletedId = genreToDelete.id;
-    await axios.delete(`/genres/${deletedId}/`);
-
-    // Убираем удаленный жанр из выделенных
-    selectedGenres.value = selectedGenres.value.filter(id => id !== deletedId);
-
-    hideDeleteModal();
-    await fetchGenres();
-    await fetchGenreStats();
-    showNotification('Жанр удален', 'danger');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении жанра');
-  }
-}
-
-function hideDeleteModal() {
-  if (deleteModalInstance) deleteModalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-  genreToDelete.id = null;
-  genreToDelete.name = "";
-}
-
-function toggleSelection(id) {
-  if (!isAdmin.value) return;
-  if (selectedGenres.value.includes(id)) {
-    selectedGenres.value = selectedGenres.value.filter((x) => x !== id);
-  } else {
-    selectedGenres.value.push(id);
-  }
-}
-
-function showDeleteSelectedModal() {
-  if (!isAdmin.value) return;
-  const modal = document.getElementById("deleteSelectedModal");
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-  deleteSelectedModalInstance.show();
-}
-
-function hideDeleteSelectedModal() {
-  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-}
-
-async function confirmDeleteSelected() {
-  if (!isAdmin.value) return;
-  
-  try {
-    await Promise.all(
-      selectedGenres.value.map((id) => axios.delete(`/genres/${id}/`))
-    );
-    selectedGenres.value = [];
-    hideDeleteSelectedModal();
-    await fetchGenres();
-    await fetchGenreStats();
-    showNotification('Выбранные жанры удалены', 'danger');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении выбранных жанров');
-  }
-}
-
-function exportGenresExcel() { exportData("excel"); }
-function exportGenresWord() { exportData("word"); }
-
-function exportData(type = "excel") {
-  axios({
-    url: `/genres/export/?type=${type}`,
-    method: "GET",
-    responseType: "blob",
+  list = list.slice().sort((a, b) => {
+    if (sortOrder.value === 'asc') {
+      return a.name.localeCompare(b.name)
+    } else {
+      return b.name.localeCompare(a.name)
+    }
   })
-    .then((res) => {
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", type === "excel" ? "genres.xlsx" : "genres.docx");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showNotification('Файл сформирован, скачивание началось', 'success');
+
+  filteredGenres.value = list
+}
+
+// добавление жанра
+async function addGenre() {
+  if (!isAdmin.value) return
+
+  const name = genreToAdd.name.trim()
+  if (!name) {
+    showNotification(notification, 'Введите название жанра', 'warning')
+    return
+  }
+
+  try {
+    await axios.post('/genres/', { name })
+    genreToAdd.name = ''
+    await loadGenres()
+    await loadGenreStats()
+    showNotification(notification, 'Жанр добавлен', 'success')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при добавлении жанра',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
+// редактирование жанра
+function openEditDialog(genre) {
+  if (!isAdmin.value) return
+  genreToEdit.id = genre.id
+  genreToEdit.name = genre.name || ''
+  showEditDialog.value = true
+}
+
+async function updateGenre() {
+  if (!isAdmin.value || !genreToEdit.id) return
+
+  const name = genreToEdit.name.trim()
+  if (!name) {
+    showNotification(notification, 'Название жанра не может быть пустым', 'warning')
+    return
+  }
+
+  try {
+    await axios.put(`/genres/${genreToEdit.id}/`, { name })
+    showEditDialog.value = false
+    await loadGenres()
+    await loadGenreStats()
+    showNotification(notification, 'Изменения сохранены', 'warning')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при обновлении жанра',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
+// удаление жанра
+function openDeleteDialog(genre) {
+  if (!isAdmin.value) return
+  genreToDelete.id = genre.id
+  genreToDelete.name = genre.name || ''
+  showDeleteDialog.value = true
+}
+
+async function deleteGenre() {
+  if (!isAdmin.value || !genreToDelete.id) return
+
+  try {
+    await axios.delete(`/genres/${genreToDelete.id}/`)
+    showDeleteDialog.value = false
+    await loadGenres()
+    await loadGenreStats()
+    showNotification(notification, 'Жанр удалён', 'danger')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при удалении жанра',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
+// экспорт жанров
+async function exportGenres(type = 'excel') {
+  if (!isAdmin.value) return
+
+  try {
+    const response = await axios.get('/genres/export/', {
+      params: { type },
+      responseType: 'blob',
     })
-    .catch((err) => {
-      handleApiError(err, 'Ошибка при скачивании файла');
-    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', type === 'excel' ? 'genres.xlsx' : 'genres.docx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+
+    showNotification(notification, 'Файл сформирован, скачивание началось', 'success')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при скачивании файла',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
 }
 
 onMounted(async () => {
-  await fetchUser();
-  await fetchGenres();
-  await fetchGenreStats();
-});
+  await loadUser()
+  await loadGenres()
+  await loadGenreStats()
+})
 </script>
 
-<style scoped>
-.stats-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  font-size: 0.9em;
-}
+<template>
+  <v-container fluid>
+    <v-row>
+      <v-col cols="12">
+        <v-card class="pa-4" elevation="2">
+          <!-- заголовок и статистика -->
+          <div class="d-flex justify-space-between align-center mb-4">
+            <div>
+              <h2 class="mb-1">Жанры</h2>
+              <div class="text-body-2 text-medium-emphasis">
+                Всего жанров: {{ genreStats?.count || 0 }},
+                самый популярный: {{ genreStats?.top || 'нет данных' }}
+              </div>
+            </div>
 
-.stats-left {
-  display: flex;
-  gap: 12px;
-}
+            <div class="d-flex gap-2" v-if="isAdmin">
+              <v-btn
+                color="success"
+                variant="outlined"
+                prepend-icon="mdi-microsoft-excel"
+                @click="exportGenres('excel')"
+              >
+                Excel
+              </v-btn>
+              <v-btn
+                color="indigo"
+                variant="outlined"
+                prepend-icon="mdi-file-word"
+                @click="exportGenres('word')"
+              >
+                Word
+              </v-btn>
+            </div>
+          </div>
 
-.stats-right {
-  display: flex;
-  gap: 6px;
-}
+          <!-- уведомление -->
+          <v-alert
+            v-if="notification.visible"
+            :type="notification.type"
+            class="mb-4"
+            variant="tonal"
+            closable
+          >
+            {{ notification.message }}
+          </v-alert>
 
-.stat {
-  background: #fafafa;
-  border: 1px solid #ddd;
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: #333;
-}
+          <!-- поиск и сортировка -->
+          <v-row class="mb-4" align="center">
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="searchQuery"
+                label="Поиск по жанрам"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                prepend-inner-icon="mdi-magnify"
+                @input="applyFilter"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="sortOrder"
+                :items="[
+                  { title: 'От A до Я', value: 'asc' },
+                  { title: 'От Я до A', value: 'desc' },
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Сортировка"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="applyFilter"
+              />
+            </v-col>
+          </v-row>
 
-.list-group-item.selected {
-  background-color: #d1e7dd;
-  border-color: #0f5132;
-  color: #0f5132;
-}
+          <!-- добавление жанра (только админ) -->
+          <v-row v-if="isAdmin" class="mb-4" align="end">
+            <v-col cols="8">
+              <v-text-field
+                v-model="genreToAdd.name"
+                label="Новый жанр"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                @keyup.enter="addGenre"
+              />
+            </v-col>
+            <v-col cols="4">
+              <v-btn
+                color="primary"
+                block
+                size="large"
+                prepend-icon="mdi-plus"
+                height="48"
+                @click="addGenre"
+              >
+                Добавить жанр
+              </v-btn>
+            </v-col>
+          </v-row>
 
-/* Notification styles */
-.notification {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  z-index: 1060;
-  font-size: 14px;
-  max-width: 90%;
-  text-align: center;
-}
+          <!-- список жанров -->
+          <v-list lines="one">
+            <v-list-item
+              v-for="genre in filteredGenres"
+              :key="genre.id"
+              :title="genre.name"
+            >
+              <template #append>
+                <div v-if="isAdmin" class="d-flex gap-2">
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="primary"
+                    @click.stop="openEditDialog(genre)"
+                  >
+                    <v-icon icon="mdi-pencil" />
+                  </v-btn>
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="error"
+                    @click.stop="openDeleteDialog(genre)"
+                  >
+                    <v-icon icon="mdi-delete" />
+                  </v-btn>
+                </div>
+              </template>
+            </v-list-item>
 
-/* Transition for notification */
-.notif-fade-enter-active,
-.notif-fade-leave-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
+            <v-list-item
+              v-if="!filteredGenres.length"
+              title="Жанров пока нет"
+              subtitle="Добавьте первый жанр, чтобы начать."
+            />
+          </v-list>
+        </v-card>
+      </v-col>
+    </v-row>
 
-.notif-fade-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
+    <!-- диалог редактирования -->
+    <v-dialog v-if="isAdmin" v-model="showEditDialog" max-width="420">
+      <v-card>
+        <v-card-title>Редактировать жанр</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="genreToEdit.name"
+            label="Название жанра"
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showEditDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="primary" @click="updateGenre">
+            Сохранить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-.notif-fade-enter-to {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.notif-fade-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.notif-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
-
-/* Bootstrap colors */
-.notification-success {
-  background: #198754;
-}
-
-.notification-danger {
-  background: #dc3545;
-}
-
-.notification-warning {
-  background: #ffc107;
-  color: #000;
-}
-</style>
+    <!-- диалог удаления -->
+    <v-dialog v-if="isAdmin" v-model="showDeleteDialog" max-width="420">
+      <v-card>
+        <v-card-title class="text-h6">
+          Удалить жанр
+        </v-card-title>
+        <v-card-text>
+          Вы уверены, что хотите удалить жанр
+          <strong>{{ genreToDelete.name }}</strong>?
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showDeleteDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="error" @click="deleteGenre">
+            Удалить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-container>
+</template>

@@ -1,3 +1,7 @@
+<script setup>
+
+</script>
+
 <template>
   <div class="d-flex flex-column align-items-center pt-5 text-center bg-white min-vh-100">
     <img 
@@ -18,8 +22,6 @@
   </div>
 </template>
 
-<script setup>
-</script>
 
 <style scoped>
 .min-vh-100 {

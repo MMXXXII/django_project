@@ -1,79 +1,3 @@
-<template>
-  <div class="login-container">
-    <!-- Приветствие и GIF выше формы -->
-    <div class="welcome-container">
-      <img
-        src="https://i.pinimg.com/originals/39/70/fd/3970fd45f8264338153834f7ff18f4f0.gif"
-        alt="Приветствие"
-        class="welcome-gif mb-4"
-      />
-      <h2>Добро пожаловать! Пожалуйста, войдите в систему.</h2>
-    </div>
-
-    <!-- Первый этап: логин и пароль -->
-    <form v-if="!showOtpInput" @submit.prevent="handleLogin">
-      <div class="form-group">
-        <label for="username">Имя пользователя:</label>
-        <input 
-          type="text" 
-          v-model="username" 
-          id="username" 
-          required 
-          placeholder="Введите имя пользователя"
-        />
-      </div>
-      <div class="form-group">
-        <label for="password">Пароль:</label>
-        <input 
-          type="password" 
-          v-model="password" 
-          id="password" 
-          required 
-          placeholder="Введите пароль"
-        />
-      </div>
-      <button type="submit" :disabled="userStore.loading">
-        {{ userStore.loading ? 'Загрузка...' : 'Далее' }}
-      </button>
-    </form>
-
-    <!-- Второй этап: OTP код -->
-    <form v-else @submit.prevent="handleOtpSubmit">
-      <div class="otp-info">
-        <p class="info-title">Введите код подтверждения</p>
-        <p class="info-text">
-          Осталось времени: <strong>{{ formattedOtpTime }}</strong>
-        </p>
-      </div>
-      
-      <div class="form-group">
-        <label for="otp">Код подтверждения:</label>
-        <input 
-          type="text" 
-          v-model="otpCode" 
-          id="otp" 
-          required 
-          placeholder="000000"
-          maxlength="6"
-          inputmode="numeric"
-        />
-      </div>
-
-      <button type="submit" :disabled="userStore.loading || otpCode.length !== 6">
-        {{ userStore.loading ? 'Проверка...' : 'Подтвердить' }}
-      </button>
-      <button type="button" @click="handleBack" class="back-btn" :disabled="userStore.loading">
-        Назад
-      </button>
-    </form>
-
-    <!-- Сообщение об ошибке -->
-    <div v-if="userStore.error" class="error-message">
-      {{ userStore.error }}
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -158,34 +82,111 @@ function handleBack() {
 }
 </script>
 
+<template>
+  <div class="login-container">
+    <!-- Приветствие и GIF выше формы -->
+    <div class="welcome-container">
+      <img
+        src="https://i.pinimg.com/originals/39/70/fd/3970fd45f8264338153834f7ff18f4f0.gif"
+        alt="Приветствие"
+        class="welcome-gif mb-4"
+      />
+      <h2>Добро пожаловать! Пожалуйста, войдите в систему.</h2>
+    </div>
+
+    <!-- Первый этап: логин и пароль -->
+    <form v-if="!showOtpInput" @submit.prevent="handleLogin">
+      <div class="form-group">
+        <label for="username">Имя пользователя:</label>
+        <input 
+          type="text" 
+          v-model="username" 
+          id="username" 
+          required 
+          placeholder="Введите имя пользователя"
+        />
+      </div>
+      <div class="form-group">
+        <label for="password">Пароль:</label>
+        <input 
+          type="password" 
+          v-model="password" 
+          id="password" 
+          required 
+          placeholder="Введите пароль"
+        />
+      </div>
+      <button type="submit" :disabled="userStore.loading">
+        {{ userStore.loading ? 'Загрузка...' : 'Далее' }}
+      </button>
+    </form>
+
+    <!-- Второй этап: OTP код -->
+    <form v-else @submit.prevent="handleOtpSubmit">
+      <div class="otp-info">
+        <p class="info-title">Введите код подтверждения</p>
+        <p class="info-text">
+          Осталось времени: <strong>{{ formattedOtpTime }}</strong>
+        </p>
+      </div>
+      
+      <div class="form-group">
+        <label for="otp">Код подтверждения:</label>
+        <input 
+          type="text" 
+          v-model="otpCode" 
+          id="otp" 
+          required 
+          placeholder="000000"
+          maxlength="6"
+          inputmode="numeric"
+        />
+      </div>
+
+      <button type="submit" :disabled="userStore.loading || otpCode.length !== 6">
+        {{ userStore.loading ? 'Проверка...' : 'Подтвердить' }}
+      </button>
+      <button type="button" @click="handleBack" class="back-btn" :disabled="userStore.loading">
+        Назад
+      </button>
+    </form>
+
+    <!-- Сообщение об ошибке -->
+    <div v-if="userStore.error" class="error-message">
+      {{ userStore.error }}
+    </div>
+  </div>
+</template>
+
+
 <style scoped>
 .login-container {
   max-width: 400px;
-  margin: 0 auto; /* Убираем отступы сверху и снизу */
+  margin: 0 auto;
   padding: 20px;
   border: 1px solid #ddd;
   border-radius: 8px;
-  background-color: #fff; /* Белый фон для контейнера */
+  background-color: #fff;
   box-sizing: border-box;
 }
 
 .welcome-container {
   text-align: center;
-  margin-bottom: 20px; /* Отступ снизу */
+  margin-bottom: 20px;
 }
 
 .welcome-gif {
   width: 100%;
-  max-height: 250px; /* Ограничение по высоте */
-  object-fit: cover; /* Сохраняет пропорции */
-  margin-bottom: 20px; /* Отступ снизу */
+  max-height: 250px;
+  object-fit: cover; 
+  margin-bottom: 20px; 
 }
 
 h2 {
   font-size: 1.5em;
   color: #333;
   font-weight: bold;
-  margin-top: 0; /* Убираем отступ сверху */
+  margin-top: 0; 
 }
 
 .form-group {

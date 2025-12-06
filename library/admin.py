@@ -23,7 +23,7 @@ class MemberAdmin(admin.ModelAdmin):
         # Проверка, что пользователь является суперпользователем
         if request.user.is_superuser:
             return queryset  # Суперпользователь видит всех читалетей
-        return queryset.none()  # Обычные пользователи не видят читалетей
+        return queryset.none() 
 
 @admin.register(Loan)
 class LoanAdmin(admin.ModelAdmin):

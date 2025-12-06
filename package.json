@@ -1,8 +1,18 @@
 {
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",
-    "axios": "^1.12.2",
+    "@mdi/font": "^7.4.47",
+    "@primeuix/themes": "^2.0.1",
+    "@primevue/themes": "^4.5.1",
+    "@vitejs/plugin-vue": "^6.0.2",
+    "axios": "^1.13.2",
     "bootstrap": "^5.3.8",
-    "js-cookie": "^3.0.5"
+    "bootstrap-icons": "^1.13.1",
+    "js-cookie": "^3.0.5",
+    "pinia": "^3.0.4",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.5.1",
+    "vue-router": "^4.6.3",
+    "vuetify": "^3.11.0-beta.1"
   }
 }

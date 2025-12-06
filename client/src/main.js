@@ -2,24 +2,32 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+
+// Иконки
+import '@mdi/font/css/materialdesignicons.css'
+import 'bootstrap-icons/font/bootstrap-icons.css'
+import '@fortawesome/fontawesome-free/css/all.min.css'
+
+// Vuetify (стили уже подключены в plugins/vuetify.js)
+import vuetify from './plugins/vuetify'
+
+// Bootstrap
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle'
-import 'bootstrap-icons/font/bootstrap-icons.css'
-import '@fortawesome/fontawesome-free/css/all.min.css';
-
 
 import axios from 'axios'
 import Cookies from 'js-cookie'
 
-// выставляем CSRF заголовок для Django
 axios.defaults.xsrfCookieName = 'csrftoken'
 axios.defaults.xsrfHeaderName = 'X-CSRFToken'
 axios.defaults.headers.common['X-CSRFToken'] = Cookies.get('csrftoken')
 axios.defaults.baseURL = '/api'
 
-const pinia = createPinia()
 const app = createApp(App)
+const pinia = createPinia()
 
 app.use(pinia)
 app.use(router)
+app.use(vuetify)
+
 app.mount('#app')

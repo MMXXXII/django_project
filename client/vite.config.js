@@ -1,11 +1,12 @@
-import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+import vuetify from 'vite-plugin-vuetify';
 
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), vuetify({ autoImport: true }) 
+  ], 
   server: {
     proxy: {
       '/api': {
@@ -14,19 +15,18 @@ export default defineConfig({
         secure: false,
       },
       '/admin': {
-        target: 'http://localhost:8000',  // Прокси для админки
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       '/static': {
-        target: 'http://localhost:8000',  // Прокси для статики
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       'media': {
-        target: 'http://localhost:8000'
+        target: 'http://localhost:8000',
       },
-    }
+    },
   },
-})
-
+});

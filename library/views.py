@@ -26,7 +26,6 @@ class ShowLibraryView(TemplateView):
         return context
 
 class OTPRequired(BasePermission):
-    """Проверка OTP перед доступом к определённым страницам"""
     def has_permission(self, request, view):
         otp_good = cache.get(f'otp_good_{request.user.id}', False)
         if not otp_good:
@@ -38,10 +37,6 @@ class OTPRequired(BasePermission):
         return True
 
 class UserProfileViewSet(GenericViewSet):
-    """
-    Управление профилем пользователя и OTP-аутентификацией.
-    Также поддерживает стандартные list и retrieve.
-    """
     permission_classes = [IsAuthenticated]
 
     class LoginSerializer(serializers.Serializer):
@@ -63,9 +58,6 @@ class UserProfileViewSet(GenericViewSet):
             model = UserProfile
             fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_superuser', 'age']
 
-    # -----------------------
-    # Стандартные методы DRF
-    # -----------------------
     def list(self, request):
         profiles = UserProfile.objects.select_related('user').all()
         serializer = self.UserProfileSerializer(profiles, many=True)
@@ -79,9 +71,6 @@ class UserProfileViewSet(GenericViewSet):
         serializer = self.UserProfileSerializer(profile)
         return Response(serializer.data)
 
-    # -----------------------
-    # Кастомные actions
-    # -----------------------
     @action(detail=False, url_path="check-login", methods=['GET'], permission_classes=[])
     def get_check_login(self, request):
         return Response({'is_authenticated': request.user.is_authenticated})
@@ -142,7 +131,7 @@ class UserProfileViewSet(GenericViewSet):
     def get_user_info(self, request):
         user = request.user
         return Response({
-            'id': user.id,  # ← Добавьте эту строку
+            'id': user.id,
             'username': user.username,
             'email': user.email,
             'first_name': user.first_name,

@@ -24,7 +24,6 @@ class BookSerializer(serializers.ModelSerializer):
         return obj.is_available()
 
 
-# Остальные сериализаторы без изменений...
 class GenreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Genre

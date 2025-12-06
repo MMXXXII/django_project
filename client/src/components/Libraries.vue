@@ -1,466 +1,409 @@
-<template>
-  <div>
-    <h2>Библиотеки</h2>
-
-    <!-- Уведомления -->
-    <transition name="notif-fade">
-      <div v-if="notification.visible" class="notification" :class="'notification-' + notification.type" role="status"
-        aria-live="polite">
-        {{ notification.message }}
-      </div>
-    </transition>
-
-    <!-- Статистика -->
-    <div class="stats-line">
-      <div class="stats-left">
-        <div class="stat">Количество библиотек: {{ libraryStats?.count || 0 }}</div>
-        <div class="stat">Самая используемая библиотека: {{ libraryStats?.top || "нет данных" }}</div>
-      </div>
-
-      <div class="stats-right" v-if="isAdmin">
-        <button class="btn btn-success btn-sm me-2" @click="exportLibrariesExcel">Excel</button>
-        <button class="btn btn-primary btn-sm" @click="exportLibrariesWord">Word</button>
-      </div>
-    </div>
-
-    <!-- Поиск -->
-    <div class="mb-3">
-      <input v-model="searchQuery" type="text" class="form-control" placeholder="Поиск по библиотекам"
-        @input="filterLibraries" />
-    </div>
-
-    <!-- Сортировка -->
-    <div class="mb-3">
-      <select v-model="sortOrder" @change="sortLibraries" class="form-select">
-        <option value="asc">От A до Я</option>
-        <option value="desc">От Я до A</option>
-      </select>
-    </div>
-
-    <!-- Добавление (только админ) -->
-    <form v-if="isAdmin" class="mb-3" @submit.prevent="onAddLibrary">
-      <div class="row g-2 align-items-center">
-        <div class="col">
-          <input v-model="libraryToAdd.name" class="form-control" placeholder="Название библиотеки" required />
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-outline-success">Добавить</button>
-        </div>
-      </div>
-    </form>
-
-    <!-- Массовое удаление (только админ) -->
-    <div v-if="isAdmin && selectedLibraries.length" class="mb-3">
-      <button class="btn btn-danger" @click="showDeleteSelectedModal">
-        Удалить выбранные ({{ selectedLibraries.length }})
-      </button>
-    </div>
-
-    <!-- Список библиотек -->
-    <ul class="list-group">
-      <li v-for="l in filteredLibraries" :key="l.id"
-        class="list-group-item d-flex justify-content-between align-items-center"
-        :class="{ 'selected': isAdmin && selectedLibraries.includes(l.id) }" @click="isAdmin && toggleSelection(l.id)">
-        <div>{{ l.name }}</div>
-
-        <!-- Кнопки (только админ) -->
-        <div v-if="isAdmin">
-          <button class="btn btn-sm btn-success me-2" @click.stop="onEditClick(l)">
-            <i class="bi bi-pen-fill"></i>
-          </button>
-          <button class="btn btn-sm btn-danger" @click.stop="onRemoveClick(l)">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
-      </li>
-    </ul>
-
-    <!-- Модалки -->
-    <div class="modal fade" id="editLibraryModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Редактирование библиотеки</h5>
-            <button type="button" class="btn-close" @click="hideEditModal"></button>
-          </div>
-          <div class="modal-body">
-            <input v-model="libraryToEdit.name" class="form-control" placeholder="Название библиотеки" />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideEditModal">Отмена</button>
-            <button type="button" class="btn btn-success" @click="onUpdateLibrary">Сохранить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="deleteLibraryModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление библиотеки</h5>
-            <button type="button" class="btn-close" @click="hideDeleteModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ libraryToDelete.name }}</strong>?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDelete">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="deleteSelectedModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Удаление выбранных библиотек</h5>
-            <button type="button" class="btn-close" @click="hideDeleteSelectedModal"></button>
-          </div>
-          <div class="modal-body">
-            Вы действительно хотите удалить <strong>{{ selectedLibraries.length }}</strong> библиотек?
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="hideDeleteSelectedModal">Отмена</button>
-            <button type="button" class="btn btn-danger" @click="confirmDeleteSelected">Удалить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
-import axios from "axios";
-import * as bootstrap from "bootstrap";
+import { ref, reactive, onMounted, computed } from 'vue'
+import axios from 'axios'
+import { showNotification, handleApiError } from '../utils'
 
-// --- State ---
-const libraries = ref([]);
-const filteredLibraries = ref([]);
-const searchQuery = ref("");
-const sortOrder = ref("asc");
-const libraryStats = ref(null);
-const user = ref(null);
-const isAdmin = computed(() => user.value?.is_superuser);
-const selectedLibraries = ref([]);
+// данные
+const libraries = ref([])
+const filteredLibraries = ref([])
+const libraryStats = ref(null)
+const user = ref(null)
 
-const libraryToAdd = reactive({ name: "" });
-const libraryToEdit = reactive({ id: null, name: "", modalInstance: null });
-const libraryToDelete = reactive({ id: null, name: "" });
+// состояние
+const searchQuery = ref('')
+const sortOrder = ref('asc')
 
-let deleteModalInstance = null;
-let deleteSelectedModalInstance = null;
+const isAdmin = computed(() => !!user.value?.is_superuser)
 
-// --- Notification ---
 const notification = reactive({
   visible: false,
   message: '',
   type: 'success',
-  _timeoutId: null
-});
+  _timeoutId: null,
+})
 
-function showNotification(msg, type = "success", duration = 2000) {
-  if (notification._timeoutId) {
-    clearTimeout(notification._timeoutId);
-    notification._timeoutId = null;
-  }
-  notification.message = msg;
-  notification.type = type;
-  notification.visible = true;
+const showEditDialog = ref(false)
+const showDeleteDialog = ref(false)
 
-  notification._timeoutId = setTimeout(() => {
-    notification.visible = false;
-    notification._timeoutId = null;
-  }, duration);
-}
+const libraryToAdd = reactive({
+  name: '',
+})
 
-function handleApiError(err, fallbackMessage = 'Ошибка') {
-  console.error(err);
-  const msg = err?.response?.data?.detail || err?.message || fallbackMessage;
-  showNotification(msg, 'danger');
-}
+const libraryToEdit = reactive({
+  id: null,
+  name: '',
+})
 
-// --- Fetchers ---
-async function fetchUser() {
+const libraryToDelete = reactive({
+  id: null,
+  name: '',
+})
+
+// загрузка пользователя
+async function loadUser() {
   try {
-    const r = await axios.get("/userprofile/info/");
-    user.value = r.data;
+    const r = await axios.get('/userprofile/info/')
+    user.value = r.data
   } catch (err) {
-    handleApiError(err, 'Не удалось получить информацию о пользователе');
+    handleApiError(
+      err,
+      'Не удалось получить информацию о пользователе',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
   }
 }
 
-async function fetchLibraries() {
+// загрузка библиотек
+async function loadLibraries() {
   try {
-    const r = await axios.get("/libraries/");
-    libraries.value = r.data;
-    filterLibraries();
+    const r = await axios.get('/libraries/')
+    libraries.value = r.data
+    applyFilter()
   } catch (err) {
-    handleApiError(err, 'Не удалось загрузить список библиотек');
+    handleApiError(
+      err,
+      'Не удалось загрузить список библиотек',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
   }
 }
 
-async function fetchLibraryStats() {
+// загрузка статистики
+async function loadLibraryStats() {
   try {
-    const r = await axios.get("/libraries/stats/");
-    libraryStats.value = r.data;
+    const r = await axios.get('/libraries/stats/')
+    libraryStats.value = r.data
   } catch (err) {
-    handleApiError(err, 'Не удалось загрузить статистику');
+    handleApiError(
+      err,
+      'Не удалось загрузить статистику',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
   }
 }
 
-// --- Filter/Sort ---
-function filterLibraries() {
-  filteredLibraries.value = libraries.value.filter((l) =>
-    l.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-  );
-  sortLibraries();
-}
+// фильтр и сортировка
+function applyFilter() {
+  const q = searchQuery.value.trim().toLowerCase()
+  let list = libraries.value
 
-function sortLibraries() {
-  filteredLibraries.value.sort((a, b) =>
-    sortOrder.value === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-  );
-}
-
-// --- CRUD ---
-async function onAddLibrary() {
-  if (!libraryToAdd.name || !isAdmin.value) return;
-  
-  try {
-    await axios.post("/libraries/", { ...libraryToAdd });
-    libraryToAdd.name = "";
-    await fetchLibraries();
-    await fetchLibraryStats();
-    showNotification('Библиотека добавлена', 'success');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при добавлении библиотеки');
+  if (q) {
+    list = list.filter((l) => (l.name || '').toLowerCase().includes(q))
   }
-}
 
-function onEditClick(l) {
-  if (!isAdmin.value) return;
-  libraryToEdit.id = l.id;
-  libraryToEdit.name = l.name;
-  const modal = document.getElementById("editLibraryModal");
-  libraryToEdit.modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-  libraryToEdit.modalInstance.show();
-}
-
-async function onUpdateLibrary() {
-  if (!isAdmin.value || !libraryToEdit.id) return;
-  
-  try {
-    await axios.put(`/libraries/${libraryToEdit.id}/`, { name: libraryToEdit.name });
-    hideEditModal();
-    await fetchLibraries();
-    await fetchLibraryStats();
-    showNotification('Изменения сохранены', 'warning');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при обновлении библиотеки');
-  }
-}
-
-function hideEditModal() {
-  if (libraryToEdit.modalInstance) libraryToEdit.modalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-  libraryToEdit.id = null;
-  libraryToEdit.name = "";
-}
-
-function onRemoveClick(l) {
-  if (!isAdmin.value) return;
-  libraryToDelete.id = l.id;
-  libraryToDelete.name = l.name;
-  const modal = document.getElementById("deleteLibraryModal");
-  deleteModalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-  deleteModalInstance.show();
-}
-
-async function confirmDelete() {
-  if (!isAdmin.value || !libraryToDelete.id) return;
-  
-  try {
-    const deletedId = libraryToDelete.id;
-    await axios.delete(`/libraries/${deletedId}/`);
-
-    selectedLibraries.value = selectedLibraries.value.filter(id => id !== deletedId);
-
-    hideDeleteModal();
-    await fetchLibraries();
-    await fetchLibraryStats();
-    showNotification('Библиотека удалена', 'danger');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении библиотеки');
-  }
-}
-
-function hideDeleteModal() {
-  if (deleteModalInstance) deleteModalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-  libraryToDelete.id = null;
-  libraryToDelete.name = "";
-}
-
-function toggleSelection(id) {
-  if (!isAdmin.value) return;
-  if (selectedLibraries.value.includes(id)) {
-    selectedLibraries.value = selectedLibraries.value.filter((x) => x !== id);
-  } else {
-    selectedLibraries.value.push(id);
-  }
-}
-
-function showDeleteSelectedModal() {
-  if (!isAdmin.value) return;
-  const modal = document.getElementById("deleteSelectedModal");
-  deleteSelectedModalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-  deleteSelectedModalInstance.show();
-}
-
-function hideDeleteSelectedModal() {
-  if (deleteSelectedModalInstance) deleteSelectedModalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-}
-
-async function confirmDeleteSelected() {
-  if (!isAdmin.value) return;
-  
-  try {
-    await Promise.all(selectedLibraries.value.map((id) => axios.delete(`/libraries/${id}/`)));
-    selectedLibraries.value = [];
-    hideDeleteSelectedModal();
-    await fetchLibraries();
-    await fetchLibraryStats();
-    showNotification('Выбранные библиотеки удалены', 'danger');
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении выбранных библиотек');
-  }
-}
-
-// --- Export ---
-function exportLibrariesExcel() { exportData("excel"); }
-function exportLibrariesWord() { exportData("word"); }
-
-function exportData(type = "excel") {
-  axios({
-    url: `/libraries/export/?type=${type}`,
-    method: "GET",
-    responseType: "blob",
+  list = list.slice().sort((a, b) => {
+    if (sortOrder.value === 'asc') {
+      return a.name.localeCompare(b.name)
+    } else {
+      return b.name.localeCompare(a.name)
+    }
   })
-    .then((res) => {
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", type === "excel" ? "libraries.xlsx" : "libraries.docx");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showNotification('Файл сформирован, скачивание началось', 'success');
-    })
-    .catch((err) => {
-      handleApiError(err, 'Ошибка при скачивании файла');
-    });
+
+  filteredLibraries.value = list
 }
 
-// --- Init ---
+// добавить библиотеку
+async function addLibrary() {
+  if (!isAdmin.value) return
+
+  const name = libraryToAdd.name.trim()
+  if (!name) {
+    showNotification(notification, 'Введите название библиотеки', 'warning')
+    return
+  }
+
+  try {
+    await axios.post('/libraries/', { name })
+    libraryToAdd.name = ''
+    await loadLibraries()
+    await loadLibraryStats()
+    showNotification(notification, 'Библиотека добавлена', 'success')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при добавлении библиотеки',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
+// редактирование
+function openEditDialog(library) {
+  if (!isAdmin.value) return
+  libraryToEdit.id = library.id
+  libraryToEdit.name = library.name || ''
+  showEditDialog.value = true
+}
+
+async function updateLibrary() {
+  if (!isAdmin.value || !libraryToEdit.id) return
+
+  const name = libraryToEdit.name.trim()
+  if (!name) {
+    showNotification(notification, 'Название библиотеки не может быть пустым', 'warning')
+    return
+  }
+
+  try {
+    await axios.put(`/libraries/${libraryToEdit.id}/`, { name })
+    showEditDialog.value = false
+    await loadLibraries()
+    await loadLibraryStats()
+    showNotification(notification, 'Изменения сохранены', 'warning')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при обновлении библиотеки',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
+// удаление
+function openDeleteDialog(library) {
+  if (!isAdmin.value) return
+  libraryToDelete.id = library.id
+  libraryToDelete.name = library.name || ''
+  showDeleteDialog.value = true
+}
+
+async function deleteLibrary() {
+  if (!isAdmin.value || !libraryToDelete.id) return
+
+  try {
+    await axios.delete(`/libraries/${libraryToDelete.id}/`)
+    showDeleteDialog.value = false
+    await loadLibraries()
+    await loadLibraryStats()
+    showNotification(notification, 'Библиотека удалена', 'danger')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при удалении библиотеки',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
+// экспорт
+async function exportLibraries(type = 'excel') {
+  if (!isAdmin.value) return
+
+  try {
+    const response = await axios.get('/libraries/export/', {
+      params: { type },
+      responseType: 'blob',
+    })
+
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', type === 'excel' ? 'libraries.xlsx' : 'libraries.docx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+
+    showNotification(notification, 'Файл скачивается', 'success')
+  } catch (err) {
+    handleApiError(
+      err,
+      'Ошибка при экспорте',
+      (msg, type = 'danger') => showNotification(notification, msg, type),
+    )
+  }
+}
+
 onMounted(async () => {
-  await fetchUser();
-  await fetchLibraries();
-  await fetchLibraryStats();
-});
+  await loadUser()
+  await loadLibraries()
+  await loadLibraryStats()
+})
 </script>
 
-<style scoped>
-.stats-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  font-size: 0.9em;
-}
+<template>
+  <v-container fluid>
+    <v-row>
+      <v-col cols="12">
+        <v-card class="pa-4" elevation="2">
+          <!-- заголовок -->
+          <div class="d-flex justify-space-between align-center mb-4">
+            <div>
+              <h2 class="mb-1">Библиотеки</h2>
+              <div class="text-body-2 text-medium-emphasis">
+                Всего библиотек: {{ libraryStats?.count || 0 }},
+                самая популярная: {{ libraryStats?.top || 'нет данных' }}
+              </div>
+            </div>
 
-.stats-left {
-  display: flex;
-  gap: 12px;
-}
+            <div class="d-flex gap-2" v-if="isAdmin">
+              <v-btn
+                color="success"
+                variant="outlined"
+                prepend-icon="mdi-microsoft-excel"
+                @click="exportLibraries('excel')"
+              >
+                Excel
+              </v-btn>
+              <v-btn
+                color="indigo"
+                variant="outlined"
+                prepend-icon="mdi-file-word"
+                @click="exportLibraries('word')"
+              >
+                Word
+              </v-btn>
+            </div>
+          </div>
 
-.stats-right {
-  display: flex;
-  gap: 6px;
-}
+          <!-- уведомление -->
+          <v-alert
+            v-if="notification.visible"
+            :type="notification.type"
+            class="mb-4"
+            variant="tonal"
+            closable
+          >
+            {{ notification.message }}
+          </v-alert>
 
-.stat {
-  background: #fafafa;
-  border: 1px solid #ddd;
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: #333;
-}
+          <!-- поиск и сортировка -->
+          <v-row class="mb-4" align="center">
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="searchQuery"
+                label="Поиск по библиотекам"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                prepend-inner-icon="mdi-magnify"
+                @input="applyFilter"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="sortOrder"
+                :items="[
+                  { title: 'От A до Я', value: 'asc' },
+                  { title: 'От Я до A', value: 'desc' },
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Сортировка"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="applyFilter"
+              />
+            </v-col>
+          </v-row>
 
-.list-group-item.selected {
-  background-color: #d1e7dd;
-  border-color: #0f5132;
-  color: #0f5132;
-}
+          <!-- добавление библиотеки -->
+          <v-row v-if="isAdmin" class="mb-4" no-gutters>
+            <v-col cols="12" md="8" class="pr-2 pr-md-2">
+              <v-text-field
+                v-model="libraryToAdd.name"
+                label="Новая библиотека"
+                variant="outlined"
+                density="compact"
+                hide-details
+                @keyup.enter="addLibrary"
+              />
+            </v-col>
+            <v-col cols="12" md="4">
+              <v-btn
+                color="primary"
+                block
+                height="40"
+                prepend-icon="mdi-plus"
+                @click="addLibrary"
+              >
+                Добавить библиотеку
+              </v-btn>
+            </v-col>
+          </v-row>
 
-/* Notification styles */
-.notification {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  z-index: 1060;
-  font-size: 14px;
-  max-width: 90%;
-  text-align: center;
-}
+          <!-- список библиотек -->
+          <v-list lines="one">
+            <v-list-item
+              v-for="library in filteredLibraries"
+              :key="library.id"
+              :title="library.name"
+            >
+              <template #append>
+                <div v-if="isAdmin" class="d-flex gap-2">
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="primary"
+                    @click.stop="openEditDialog(library)"
+                  >
+                    <v-icon icon="mdi-pencil" />
+                  </v-btn>
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="error"
+                    @click.stop="openDeleteDialog(library)"
+                  >
+                    <v-icon icon="mdi-delete" />
+                  </v-btn>
+                </div>
+              </template>
+            </v-list-item>
 
-/* Transition for notification */
-.notif-fade-enter-active,
-.notif-fade-leave-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
+            <v-list-item
+              v-if="!filteredLibraries.length"
+              title="Библиотек пока нет"
+              subtitle="Добавьте первую библиотеку."
+            />
+          </v-list>
+        </v-card>
+      </v-col>
+    </v-row>
 
-.notif-fade-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
+    <!-- редактирование -->
+    <v-dialog v-if="isAdmin" v-model="showEditDialog" max-width="420">
+      <v-card>
+        <v-card-title>Редактировать библиотеку</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="libraryToEdit.name"
+            label="Название библиотеки"
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showEditDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="primary" @click="updateLibrary">
+            Сохранить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-.notif-fade-enter-to {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.notif-fade-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.notif-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
-
-/* Bootstrap colors */
-.notification-success {
-  background: #198754;
-}
-
-.notification-danger {
-  background: #dc3545;
-}
-
-.notification-warning {
-  background: #ffc107;
-  color: #000;
-}
-</style>
+    <!-- удаление -->
+    <v-dialog v-if="isAdmin" v-model="showDeleteDialog" max-width="420">
+      <v-card>
+        <v-card-title class="text-h6">
+          Удалить библиотеку
+        </v-card-title>
+        <v-card-text>
+          Вы уверены, что хотите удалить библиотеку
+          <strong>{{ libraryToDelete.name }}</strong>?
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showDeleteDialog = false">
+            Отмена
+          </v-btn>
+          <v-btn color="error" @click="deleteLibrary">
+            Удалить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-container>
+</template>

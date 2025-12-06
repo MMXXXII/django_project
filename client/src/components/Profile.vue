@@ -1,21 +1,3 @@
-<template>
-  <div class="profile-container">
-    <h2>Профиль пользователя</h2>
-    
-    <div v-if="userStore.loading" class="loading">Загрузка...</div>
-    
-    <div v-else-if="userStore.user" class="user-info">
-      <p><strong>Имя пользователя:</strong> {{ userStore.user.username }}</p>
-      <p><strong>Email:</strong> {{ userStore.user.email }}</p>
-      <button @click="handleLogout" class="logout-btn">Выход</button>
-    </div>
-    
-    <div v-else-if="userStore.error" class="error-message">
-      {{ userStore.error }}
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -40,6 +22,24 @@ async function handleLogout() {
   router.push('/login')
 }
 </script>
+
+<template>
+  <div class="profile-container">
+    <h2>Профиль пользователя</h2>
+    
+    <div v-if="userStore.loading" class="loading">Загрузка...</div>
+    
+    <div v-else-if="userStore.user" class="user-info">
+      <p><strong>Имя пользователя:</strong> {{ userStore.user.username }}</p>
+      <p><strong>Email:</strong> {{ userStore.user.email }}</p>
+      <button @click="handleLogout" class="logout-btn">Выход</button>
+    </div>
+    
+    <div v-else-if="userStore.error" class="error-message">
+      {{ userStore.error }}
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .profile-container {
