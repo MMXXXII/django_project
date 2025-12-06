@@ -52,13 +52,11 @@ const routes = [
   { 
     path: "/no-access", 
     component: NoAccess, 
-    meta: { hideHeader: true }
   },
   { 
     path: '/:pathMatch(.*)*', 
     name: 'NotFound', 
     component: NotFound,
-    meta: { hideHeader: true }  
   }
 ]
 
@@ -67,43 +65,35 @@ const router = createRouter({
   routes,
 })
 
-let initialized = false  // Инициализация переменной
+let initialized = false 
 
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
 
-  // Проверяем, была ли уже выполнена инициализация
   if (!initialized) {
     initialized = true
     const restored = userStore.initializeFromStorage()
-    console.log('[v0] Store initialized from storage:', restored)
   }
 
-  // Проверка, требует ли маршрут авторизации
   if (to.meta.requiresAuth) {
     if (!userStore.isAuthenticated) {
-      console.log('[v0] Not authenticated, redirecting to login')
       next('/login')
       return
     }
 
-    // Проверка на OTP (если требуется)
     if (to.meta.requiresOtp && !userStore.isOtpVerified) {
-      console.log('[v0] OTP not verified, redirecting to login')
       next('/login')
       return
     }
 
 
     if (to.meta.requiresSuperUser && !userStore.isSuperUser) {
-      console.log('[v0] Not superuser, redirecting to no-access')
-      next('/no-access') // Редирект на страницу с ошибкой доступа, если не суперпользователь
+      next('/no-access')
       return
     }
 
     next()
   } else if (to.path === '/login' && userStore.isAuthenticated && userStore.isOtpVerified) {
-    console.log('[v0] Already authenticated, redirecting to books')
     next('/books')
   } else {
     next()

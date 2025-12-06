@@ -1,104 +1,104 @@
 <template>
   <v-app>
-    <div class="container py-4">
-      <nav
-        v-if="!$route.meta.hideHeader"
-        class="mb-4 d-flex justify-content-between align-items-center"
+    <v-app-bar app color="white" elevation="2" class="px-4">
+      <v-btn
+        v-if="userStore.isAuthenticated"
+        class="mx-1 text-black"
+        variant="text"
+        to="/genres"
       >
-        <div>
-          <router-link
-            v-if="userStore.isAuthenticated"
-            class="btn btn-light me-2"
-            to="/genres"
-          >Жанры</router-link>
-          <router-link
-            v-if="userStore.isAuthenticated"
-            class="btn btn-light me-2"
-            to="/libraries"
-          >Библиотеки</router-link>
-          <router-link
-            v-if="userStore.isAuthenticated"
-            class="btn btn-light me-2"
-            to="/books"
-          >Книги</router-link>
-          <router-link
-            v-if="userStore.isAuthenticated && userStore.isSuperUser"
-            class="btn btn-light me-2"
-            to="/members"
-          >Читатели</router-link>
-          <router-link
-            v-if="userStore.isAuthenticated"
-            class="btn btn-light me-2"
-            to="/loans"
-          >Выдачи</router-link>
-        </div>
+        Жанры
+      </v-btn>
+      
+      <v-btn
+        v-if="userStore.isAuthenticated"
+        class="mx-1 text-black"
+        variant="text"
+        to="/libraries"
+      >
+        Библиотеки
+      </v-btn>
+      
+      <v-btn
+        v-if="userStore.isAuthenticated"
+        class="mx-1 text-black"
+        variant="text"
+        to="/books"
+      >
+        Книги
+      </v-btn>
+      
+      <v-btn
+        v-if="userStore.isAuthenticated && userStore.isSuperUser"
+        class="mx-1 text-black"
+        variant="text"
+        to="/members"
+      >
+        Читатели
+      </v-btn>
+      
+      <v-btn
+        v-if="userStore.isAuthenticated"
+        class="mx-1 text-black"
+        variant="text"
+        to="/loans"
+      >
+        Выдачи
+      </v-btn>
 
-        <div
-          class="d-flex align-items-center gap-2"
-          v-if="userStore.isAuthenticated"
-        >
-          <div class="dropdown" ref="dropdownWrapper">
-            <button
-              class="btn btn-light dropdown-toggle"
-              type="button"
-              @click="toggleDropdown"
-            >
-              {{ userStore.user?.username || 'Профиль' }}
-            </button>
-            <ul
-              v-if="isOpen"
-              class="dropdown-menu dropdown-menu-end show"
-            >
-              <li>
-                <router-link class="dropdown-item" to="/profile">
-                  Мой профиль
-                </router-link>
-              </li>
-              <li><hr class="dropdown-divider" /></li>
-              <li>
-                <button
-                  class="dropdown-item text-danger"
-                  @click="handleLogout"
-                >
-                  Выход
-                </button>
-              </li>
-            </ul>
-          </div>
-          <a
-            class="btn btn-light d-flex align-items-center"
-            href="/admin"
-            target="_blank"
+      <v-spacer></v-spacer>
+      
+      <v-menu
+        v-if="userStore.isAuthenticated"
+        location="bottom end"
+      >
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            class="ml-2 text-black"
+            variant="text"
           >
-            Админка
-          </a>
-        </div>
-      </nav>
+            {{ userStore.user?.username || 'Профиль' }}
+            <v-icon end color="black">mdi-menu-down</v-icon>
+          </v-btn>
+        </template>
 
-      <router-view />
-    </div>
+        <v-list>
+          <v-list-item to="/profile" title="Мой профиль" />
+          <v-divider />
+          <v-list-item @click="handleLogout" title="Выход" color="error" />
+        </v-list>
+      </v-menu>
+
+      <v-btn
+        v-if="userStore.isAuthenticated"
+        href="/admin"
+        target="_blank"
+        class="ml-2 text-black"
+        variant="text"
+      >
+        Админка
+      </v-btn>
+    </v-app-bar>
+    <v-main>
+      <div class="pa-4">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" :key="$route.path" />
+          </transition>
+        </router-view>
+      </div>
+    </v-main>
   </v-app>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/userStore'
 
-const userStore = useUserStore()
 const router = useRouter()
-const isOpen = ref(false)
-const dropdownWrapper = ref(null)
-
-const toggleDropdown = () => {
-  isOpen.value = !isOpen.value
-}
-
-const handleClickOutside = (e) => {
-  if (dropdownWrapper.value && !dropdownWrapper.value.contains(e.target)) {
-    isOpen.value = false
-  }
-}
+const userStore = useUserStore()
 
 const handleLogout = async () => {
   await userStore.logout()
@@ -107,38 +107,16 @@ const handleLogout = async () => {
 
 onMounted(() => {
   userStore.initializeFromStorage()
-  document.addEventListener('click', handleClickOutside)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
-<style scoped>
-.btn {
-  border: none;
-  box-shadow: none;
-  transition: all 0.2s ease-in-out;
-  outline: none;
+<style>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s;
 }
-.btn-light {
-  background-color: #f8f9fa;
-  color: #212529;
-}
-.btn-light:hover {
-  background-color: #e2e6ea;
-  color: #212529;
-}
-.dropdown-item {
-  border: none;
-}
-.dropdown-item:focus,
-.dropdown-item:hover {
-  background-color: #f1f1f1;
-  outline: none;
-}
-.dropdown-menu {
-  margin-top: 0.25rem;
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

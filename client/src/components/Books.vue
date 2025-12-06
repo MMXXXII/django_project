@@ -1,276 +1,126 @@
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { showNotification, handleApiError } from '../utils'
 
+const user = ref(null)
+const isAdmin = computed(() => !!user.value?.is_superuser)
 const books = ref([])
-const filteredBooks = ref([])
 const genres = ref([])
 const libraries = ref([])
 const bookStats = ref(null)
-const user = ref(null)
-
-const isAdmin = computed(() => !!user.value?.is_superuser)
-
 const searchQuery = ref('')
 
-const notification = reactive({
-  visible: false,
-  message: '',
-  type: 'success',
-  _timeoutId: null,
+
+const dialogs = reactive({
+  add: false, edit: false, delete: false
+})
+const form = reactive({
+  id: null, title: '', genre: '', library: ''
 })
 
-const showAddBookDialog = ref(false)
-const showEditBookDialog = ref(false)
-const showDeleteBookDialog = ref(false)
-
-const bookToAdd = reactive({
-  title: '',
-  genre: '',
-  library: '',
-})
-
-const bookToEdit = reactive({
-  id: null,
-  title: '',
-  genre: '',
-  library: '',
-})
-
-const bookToDelete = reactive({
-  id: null,
-  title: '',
-})
-
-const headers = [
-  { title: 'Название', value: 'title' },
-  { title: 'Жанр', value: 'genre_name' },
-  { title: 'Библиотека', value: 'library_name' },
-  { title: 'Статус', value: 'status' },
-  { title: 'Действия', value: 'actions', align: 'end' },
-]
-
-// --- Загрузка данных ---
-
-async function loadUser() {
-  try {
-    const r = await axios.get('/userprofile/info/')
-    user.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось получить информацию о пользователе', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-async function loadBooks() {
-  try {
-    const r = await axios.get('/books/')
-    books.value = r.data.map((b) => ({
-      ...b,
-      genre_name: b.genre_name || (b.genre ? b.genre.name || '' : ''),
-      library_name: b.library_name || (b.library ? b.library.name || '' : ''),
-      status: b.is_available ? 'Доступна' : 'Выдана',
-    }))
-    applyFilter()
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить список книг', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-async function loadStats() {
-  try {
-    const r = await axios.get('/books/stats/')
-    bookStats.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить статистику', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-async function loadGenres() {
-  try {
-    const r = await axios.get('/genres/')
-    genres.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить жанры', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-async function loadLibraries() {
-  try {
-    const r = await axios.get('/libraries/')
-    libraries.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить библиотеки', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-function applyFilter() {
+const filteredBooks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) {
-    filteredBooks.value = books.value.slice()
-    return
-  }
-  filteredBooks.value = books.value.filter((b) =>
-    (b.title || '').toLowerCase().includes(q),
+  return !q ? books.value : books.value.filter(b => 
+    (b.title || '').toLowerCase().includes(q)
   )
+})
+const headers = [{
+  title: 'Название', value: 'title'
+}, { title: 'Жанр', value: 'genre_name' }
+, { title: 'Библиотека', value: 'library_name' }
+, { title: 'Статус', value: 'status' }
+, { title: 'Действия', value: 'actions', align: 'end' }]
+
+async function loadData() {
+  try {
+    const [userRes, booksRes, statsRes, genresRes, libsRes] = await Promise.all([
+      axios.get('/userprofile/info/'),
+      axios.get('/books/'),
+      axios.get('/books/stats/'),
+      axios.get('/genres/'),
+      axios.get('/libraries/')
+    ])
+    user.value = userRes.data
+    books.value = booksRes.data.map(b => ({
+      ...b,
+      genre_name: b.genre_name || (b.genre?.name || ''),
+      library_name: b.library_name || (b.library?.name || ''),
+      status: b.is_available ? 'Доступна' : 'Выдана'
+    }))
+    bookStats.value = statsRes.data
+    genres.value = genresRes.data
+    libraries.value = libsRes.data
+  } catch (err) {
+    handleApiError(err, 'Ошибка загрузки данных', showNotification)
+  }
 }
 
-// --- Книги: добавить / редактировать / удалить ---
-
-async function addBook() {
+function resetForm() {
+  Object.assign(form, { id: null, title: '', genre: '', library: '' })
+}
+function openEdit(book) {
   if (!isAdmin.value) return
-
-  if (!bookToAdd.title || !bookToAdd.genre || !bookToAdd.library) {
-    showNotification(notification, 'Заполните название, жанр и библиотеку', 'warning')
+  Object.assign(form, {
+    id: book.id, title: book.title || '',
+    genre: book.genre?.id || book.genre || '',
+    library: book.library?.id || book.library || ''
+  })
+  dialogs.edit = true
+}
+function openDelete(book) {
+  if (!isAdmin.value) return
+  Object.assign(form, { id: book.id, title: book.title || '' })
+  dialogs.delete = true
+}
+async function saveForm() {
+  if (!isAdmin.value || !form.title || !form.genre || !form.library) {
+    showNotification({ visible: true, message: 'Заполните все поля', type: 'warning' })
     return
   }
-
   try {
-    await axios.post('/books/', {
-      title: bookToAdd.title,
-      genre: bookToAdd.genre,
-      library: bookToAdd.library,
-    })
-
-    bookToAdd.title = ''
-    bookToAdd.genre = ''
-    bookToAdd.library = ''
-    showAddBookDialog.value = false
-
-    await loadBooks()
-    await loadStats()
-    showNotification(notification, 'Книга добавлена', 'success')
+    const url = form.id ? `/books/${form.id}/` : '/books/'
+    const method = form.id ? axios.put : axios.post
+    await method(url, { title: form.title, genre: form.genre, library: form.library })
+    dialogs[form.id ? 'edit' : 'add'] = false
+    resetForm()
+    await loadData()
+    showNotification({ visible: true, message: form.id ? 'Сохранено' : 'Добавлено', type: 'success' })
   } catch (err) {
-    handleApiError(err, 'Ошибка при добавлении книги', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
+    handleApiError(err, 'Ошибка сохранения', showNotification)
   }
 }
-
-function openEditDialog(book) {
-  if (!isAdmin.value) return
-
-  bookToEdit.id = book.id
-  bookToEdit.title = book.title || ''
-  bookToEdit.genre =
-    book.genre && typeof book.genre === 'object' ? book.genre.id : book.genre || ''
-  bookToEdit.library =
-    book.library && typeof book.library === 'object'
-      ? book.library.id
-      : book.library || ''
-
-  showEditBookDialog.value = true
-}
-
-async function updateBook() {
-  if (!isAdmin.value || !bookToEdit.id) return
-
-  try {
-    await axios.put(`/books/${bookToEdit.id}/`, {
-      title: bookToEdit.title,
-      genre: bookToEdit.genre,
-      library: bookToEdit.library,
-    })
-
-    showEditBookDialog.value = false
-    await loadBooks()
-    await loadStats()
-    showNotification(notification, 'Изменения сохранены', 'warning')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при обновлении книги', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-function openDeleteDialog(book) {
-  if (!isAdmin.value) return
-
-  bookToDelete.id = book.id
-  bookToDelete.title = book.title || ''
-  showDeleteBookDialog.value = true
-}
-
 async function deleteBook() {
-  if (!isAdmin.value || !bookToDelete.id) return
-
+  if (!isAdmin.value || !form.id) return
   try {
-    await axios.delete(`/books/${bookToDelete.id}/`)
-
-    showDeleteBookDialog.value = false
-    await loadBooks()
-    await loadStats()
-    showNotification(notification, 'Книга удалена', 'danger')
+    await axios.delete(`/books/${form.id}/`)
+    dialogs.delete = false
+    resetForm()
+    await loadData()
+    showNotification({ visible: true, message: 'Удалено', type: 'danger' })
   } catch (err) {
-    handleApiError(err, 'Ошибка при удалении книги', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
+    handleApiError(err, 'Ошибка удаления', showNotification)
   }
 }
 
-// --- Экспорт ---
-
-async function exportExcel() {
+async function exportFile(type) {
   if (!isAdmin.value) return
-
   try {
-    const response = await axios.get('/books/export/', {
-      params: { type: 'excel' },
-      responseType: 'blob',
+    const res = await axios.get('/books/export/', {
+      params: { type }, responseType: 'blob'
     })
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'Books.xlsx')
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Books.${type === 'excel' ? 'xlsx' : 'docx'}` 
+    a.click()
+    URL.revokeObjectURL(url)
   } catch (err) {
-    handleApiError(err, 'Ошибка при экспорте в Excel', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
+    handleApiError(err, `Ошибка экспорта ${type}`, showNotification)
   }
 }
 
-async function exportWord() {
-  if (!isAdmin.value) return
-
-  try {
-    const response = await axios.get('/books/export/', {
-      params: { type: 'word' },
-      responseType: 'blob',
-    })
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'Books.docx')
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-  } catch (err) {
-    handleApiError(err, 'Ошибка при экспорте в Word', (msg, type = 'danger') =>
-      showNotification(notification, msg, type),
-    )
-  }
-}
-
-onMounted(async () => {
-  await loadUser()
-  await loadGenres()
-  await loadLibraries()
-  await loadBooks()
-  await loadStats()
-})
+onMounted(loadData)
 </script>
 
 <template>
@@ -280,67 +130,40 @@ onMounted(async () => {
         <v-card class="pa-4" elevation="2">
           <div class="d-flex justify-space-between align-center mb-4">
             <div>
-              <h2 class="mb-1">Книги</h2>
+              <h2>Книги</h2>
               <div class="text-body-2 text-medium-emphasis">
-                Всего: {{ bookStats?.total || 0 }},
-                доступно: {{ bookStats?.available || 0 }},
-                выдано: {{ bookStats?.loaned || 0 }}
+                Всего: {{ bookStats?.count || 0 }},
+                самая популярная: {{ bookStats?.most_borrowed?.title || 'нет данных' }}
               </div>
             </div>
-
             <div class="d-flex gap-2" v-if="isAdmin">
-              <v-btn color="success" variant="outlined" @click="exportExcel" prepend-icon="mdi-microsoft-excel">
-                Excel
-              </v-btn>
-              <v-btn color="indigo" variant="outlined" @click="exportWord" prepend-icon="mdi-file-word">
-                Word
-              </v-btn>
+              <v-btn @click="exportFile('excel')" color="success" variant="outlined" prepend-icon="mdi-microsoft-excel">Excel</v-btn>
+              <v-btn @click="exportFile('word')" color="indigo" variant="outlined" prepend-icon="mdi-file-word">Word</v-btn>
             </div>
           </div>
 
-          <v-alert v-if="notification.visible" :type="notification.type" class="mb-4" variant="tonal" closable>
-            {{ notification.message }}
-          </v-alert>
+          <v-text-field v-model="searchQuery" label="Поиск по книгам" variant="outlined" 
+            clearable prepend-inner-icon="mdi-magnify" density="comfortable" class="mb-4" />
+          
+          <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" 
+            @click="dialogs.add = true" class="mb-4">Добавить книгу</v-btn>
 
-          <v-row class="mb-4" align="center">
-            <v-col cols="12" md="6">
-              <v-text-field v-model="searchQuery" label="Поиск по книгам" variant="outlined" density="comfortable"
-                clearable prepend-inner-icon="mdi-magnify" @input="applyFilter" />
-            </v-col>
-            <v-col cols="12" md="6" class="d-flex justify-end">
-              <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" @click="showAddBookDialog = true">
-                Добавить книгу
-              </v-btn>
-            </v-col>
-          </v-row>
-
-          <v-data-table :headers="headers" :items="filteredBooks" item-key="id" :items-per-page="10"
-            class="elevation-1">
+          <v-data-table :headers="headers" :items="filteredBooks" item-key="id" :items-per-page="10" class="elevation-1">
             <template #item.status="{ item }">
               <v-chip :color="item.status === 'Доступна' ? 'success' : 'orange'" variant="flat">
                 {{ item.status }}
               </v-chip>
             </template>
-
             <template #item.actions="{ item }">
-              <div v-if="isAdmin" style="display: flex; justify-content: flex-end;">
-                <v-btn variant="text" color="primary" prepend-icon="mdi-pencil" @click="openEditDialog(item)">
-                </v-btn>
-                <v-btn variant="text" color="error" prepend-icon="mdi-delete" @click="openDeleteDialog(item)">
-                </v-btn>
+              <div v-if="isAdmin" class="d-flex gap-1">
+                <v-btn variant="text" color="primary" prepend-icon="mdi-pencil" @click="openEdit(item)" size="small"></v-btn>
+                <v-btn variant="text" color="error" prepend-icon="mdi-delete" @click="openDelete(item)" size="small"></v-btn>
               </div>
-            </template> 
-
-
-
-
+            </template>
             <template #no-data>
               <div class="text-center pa-6">
                 <div class="mb-2">Нет книг</div>
-                <div class="text-body-2 mb-3">
-                  Добавьте первую книгу, чтобы начать.
-                </div>
-                <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" @click="showAddBookDialog = true">
+                <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" @click="dialogs.add = true">
                   Добавить книгу
                 </v-btn>
               </div>
@@ -350,69 +173,46 @@ onMounted(async () => {
       </v-col>
     </v-row>
 
-    <!-- Диалог добавления -->
-    <v-dialog v-if="isAdmin" v-model="showAddBookDialog" max-width="520">
+    <v-dialog v-model="dialogs.add" max-width="520" v-if="isAdmin">
       <v-card>
         <v-card-title>Добавить книгу</v-card-title>
         <v-card-text>
-          <v-text-field v-model="bookToAdd.title" label="Название книги" variant="outlined" density="comfortable"
-            class="mb-3" />
-          <v-select v-model="bookToAdd.genre" :items="genres" item-value="id" item-title="name" label="Жанр"
-            variant="outlined" density="comfortable" class="mb-3" />
-          <v-select v-model="bookToAdd.library" :items="libraries" item-value="id" item-title="name" label="Библиотека"
-            variant="outlined" density="comfortable" />
+          <v-text-field v-model="form.title" label="Название" variant="outlined" density="comfortable" class="mb-3" />
+          <v-select v-model="form.genre" :items="genres" item-value="id" item-title="name" label="Жанр" variant="outlined" density="comfortable" class="mb-3" />
+          <v-select v-model="form.library" :items="libraries" item-value="id" item-title="name" label="Библиотека" variant="outlined" density="comfortable" />
         </v-card-text>
-        <v-card-actions class="justify-end">
-          <v-btn variant="text" @click="showAddBookDialog = false">
-            Отмена
-          </v-btn>
-          <v-btn color="primary" @click="addBook">
-            Добавить
-          </v-btn>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="dialogs.add = false">Отмена</v-btn>
+          <v-btn color="primary" @click="saveForm">Добавить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Диалог редактирования -->
-    <v-dialog v-if="isAdmin" v-model="showEditBookDialog" max-width="520">
+    <v-dialog v-model="dialogs.edit" max-width="520" v-if="isAdmin">
       <v-card>
         <v-card-title>Редактировать книгу</v-card-title>
         <v-card-text>
-          <v-text-field v-model="bookToEdit.title" label="Название книги" variant="outlined" density="comfortable"
-            class="mb-3" />
-          <v-select v-model="bookToEdit.genre" :items="genres" item-value="id" item-title="name" label="Жанр"
-            variant="outlined" density="comfortable" class="mb-3" />
-          <v-select v-model="bookToEdit.library" :items="libraries" item-value="id" item-title="name" label="Библиотека"
-            variant="outlined" density="comfortable" />
+          <v-text-field v-model="form.title" label="Название" variant="outlined" density="comfortable" class="mb-3" />
+          <v-select v-model="form.genre" :items="genres" item-value="id" item-title="name" label="Жанр" variant="outlined" density="comfortable" class="mb-3" />
+          <v-select v-model="form.library" :items="libraries" item-value="id" item-title="name" label="Библиотека" variant="outlined" density="comfortable" />
         </v-card-text>
-        <v-card-actions class="justify-end">
-          <v-btn variant="text" @click="showEditBookDialog = false">
-            Отмена
-          </v-btn>
-          <v-btn color="primary" @click="updateBook">
-            Сохранить
-          </v-btn>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="dialogs.edit = false">Отмена</v-btn>
+          <v-btn color="primary" @click="saveForm">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Диалог удаления -->
-    <v-dialog v-if="isAdmin" v-model="showDeleteBookDialog" max-width="420">
+    <v-dialog v-model="dialogs.delete" max-width="420" v-if="isAdmin">
       <v-card>
-        <v-card-title class="text-h6">
-          Удалить книгу
-        </v-card-title>
-        <v-card-text>
-          Вы уверены, что хотите удалить книгу
-          <strong>{{ bookToDelete.title }}</strong>?
-        </v-card-text>
-        <v-card-actions class="justify-end">
-          <v-btn variant="text" @click="showDeleteBookDialog = false">
-            Отмена
-          </v-btn>
-          <v-btn color="error" @click="deleteBook">
-            Удалить
-          </v-btn>
+        <v-card-title>Удалить книгу</v-card-title>
+        <v-card-text>Вы уверены, что хотите удалить <strong>{{ form.title }}</strong>?</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="dialogs.delete = false">Отмена</v-btn>
+          <v-btn color="error" @click="deleteBook">Удалить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

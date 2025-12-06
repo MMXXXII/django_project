@@ -20,9 +20,8 @@ class MemberAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        # Проверка, что пользователь является суперпользователем
         if request.user.is_superuser:
-            return queryset  # Суперпользователь видит всех читалетей
+            return queryset
         return queryset.none() 
 
 @admin.register(Loan)

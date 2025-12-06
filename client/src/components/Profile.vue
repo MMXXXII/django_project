@@ -6,13 +6,8 @@ import { useUserStore } from '../stores/userStore'
 const router = useRouter()
 const userStore = useUserStore()
 
-onMounted(async () => {
-  try {
-    if (!userStore.isAuthenticated) {
-      router.push('/login')
-    }
-  } catch (err) {
-    console.error('Ошибка при загрузке профиля:', err)
+onMounted(() => {
+  if (!userStore.isAuthenticated) {
     router.push('/login')
   }
 })
@@ -24,64 +19,74 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="profile-container">
-    <h2>Профиль пользователя</h2>
-    
-    <div v-if="userStore.loading" class="loading">Загрузка...</div>
-    
-    <div v-else-if="userStore.user" class="user-info">
-      <p><strong>Имя пользователя:</strong> {{ userStore.user.username }}</p>
-      <p><strong>Email:</strong> {{ userStore.user.email }}</p>
-      <button @click="handleLogout" class="logout-btn">Выход</button>
-    </div>
-    
-    <div v-else-if="userStore.error" class="error-message">
-      {{ userStore.error }}
-    </div>
-  </div>
+  <v-container class="profile-container">
+    <v-card class="pa-6 mx-auto" max-width="600" elevation="4" rounded="lg">     
+      <div class="text-center mb-5">
+        <v-avatar size="100" color="primary" class="mx-auto mb-3">
+          <v-icon size="60" color="white">mdi-account-circle</v-icon>
+        </v-avatar>
+        <v-card-title class="pa-0 justify-center">Профиль пользователя</v-card-title>
+      </div>
+
+      <v-card-text>
+        <v-progress-linear
+          v-if="userStore.loading"
+          indeterminate
+          height="4"
+          class="mb-4"
+          rounded
+          color="primary"
+        ></v-progress-linear>
+
+        <div v-else-if="userStore.user" class="text-center">
+          <v-list dense max-width="400" style="margin: 0 auto;">
+            <v-list-item>
+              <v-list-item-avatar>
+                <v-icon>mdi-account</v-icon>
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title>Имя пользователя</v-list-item-title>
+                <v-list-item-subtitle>{{ userStore.user.username }}</v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
+
+            <v-divider class="my-3"></v-divider>
+
+            <v-list-item>
+              <v-list-item-avatar>
+                <v-icon>mdi-email</v-icon>
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title>Email</v-list-item-title>
+                <v-list-item-subtitle>{{ userStore.user.email }}</v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
+          </v-list>
+
+          <v-btn
+            color="error"
+            class="mt-5"
+            block
+            rounded="lg"
+            @click="handleLogout"
+            max-width="300"
+          >
+            Выход
+          </v-btn>
+        </div>
+
+        <v-alert
+          v-else-if="userStore.error"
+          type="error"
+          dense
+          outlined
+          class="mt-5 mx-auto"
+          max-width="400"
+          rounded
+        >
+          {{ userStore.error }}
+        </v-alert>
+      </v-card-text>
+    </v-card>
+  </v-container>
 </template>
-
-<style scoped>
-.profile-container {
-  max-width: 600px;
-  margin: 30px auto;
-  padding: 20px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-}
-
-.user-info {
-  margin: 20px 0;
-}
-
-.user-info p {
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.logout-btn {
-  width: 100%;
-  padding: 10px 20px;
-  background-color: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-  margin-top: 20px;
-}
-
-.logout-btn:hover {
-  background-color: #c82333;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-}
-
-.error-message {
-  color: red;
-  margin-top: 10px;
-}
-</style>

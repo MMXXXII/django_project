@@ -20,7 +20,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from rest_framework.routers import DefaultRouter
-# Измените эту строку:
+
 from library.api import LibraryViewSet, BookViewSet, GenreViewSet, LoanViewSet, MemberViewSet, LibraryMemberViewSet
 from library.views import UserProfileViewSet
 

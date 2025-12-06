@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 export function showNotification(notification, msg, type = "success", duration = 2000) {
   if (notification._timeoutId) {
     clearTimeout(notification._timeoutId);
@@ -11,6 +13,12 @@ export function showNotification(notification, msg, type = "success", duration =
     notification.visible = false;
     notification._timeoutId = null;
   }, duration);
+}
+
+export const dataReloadTrigger = ref(0)
+
+export function triggerDataReload() {
+  dataReloadTrigger.value++
 }
 
 export function handleApiError(err, fallbackMessage = 'Ошибка', showNotificationCallback) {
@@ -64,3 +72,5 @@ export function exportData(url, type = 'excel', showNotificationCallback) {
       handleApiError(err, 'Ошибка при скачивании файла', showNotificationCallback);
     });
 }
+
+

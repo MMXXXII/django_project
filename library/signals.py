@@ -9,14 +9,11 @@ from .models import Member, Library, UserProfile
 def create_member_profile(sender, instance, created, **kwargs):
     """Автоматически создаём Member профиль при создании пользователя"""
     if created:
-        # Создаём UserProfile
         UserProfile.objects.get_or_create(user=instance)
         
-        # Получаем первую библиотеку
         library = Library.objects.first()
         
         if library:
-            # Создаём Member профиль
             Member.objects.get_or_create(
                 user=instance,
                 defaults={
