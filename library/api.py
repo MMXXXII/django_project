@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Avg, Max, Min
+from django.db.models import Count
 from django.http import HttpResponse
 import io
 from django.contrib.auth.models import User

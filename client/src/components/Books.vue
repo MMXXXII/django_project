@@ -12,6 +12,8 @@ const bookStats = ref(null)
 const searchQuery = ref('')
 
 
+const sortBy = ref([{ key: 'title', order: 'asc' }])
+
 const dialogs = reactive({
   add: false, edit: false, delete: false
 })
@@ -19,21 +21,22 @@ const form = reactive({
   id: null, title: '', genre: '', library: ''
 })
 
+const headers = [
+  { title: 'Название', key: 'title', sortable: true },
+  { title: 'Жанр', key: 'genre_name', sortable: true },
+  { title: 'Библиотека', key: 'library_name', sortable: true },
+  { title: 'Статус', key: 'status', sortable: true },
+  { title: 'Действия', key: 'actions', sortable: false }
+]
+
 const filteredBooks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  return !q ? books.value : books.value.filter(b => 
+  return !q ? books.value : books.value.filter(b =>
     (b.title || '').toLowerCase().includes(q)
   )
 })
-const headers = [{
-  title: 'Название', value: 'title'
-}, { title: 'Жанр', value: 'genre_name' }
-, { title: 'Библиотека', value: 'library_name' }
-, { title: 'Статус', value: 'status' }
-, { title: 'Действия', value: 'actions', align: 'end' }]
 
 async function loadData() {
-  try {
     const [userRes, booksRes, statsRes, genresRes, libsRes] = await Promise.all([
       axios.get('/userprofile/info/'),
       axios.get('/books/'),
@@ -51,14 +54,12 @@ async function loadData() {
     bookStats.value = statsRes.data
     genres.value = genresRes.data
     libraries.value = libsRes.data
-  } catch (err) {
-    handleApiError(err, 'Ошибка загрузки данных', showNotification)
-  }
 }
 
 function resetForm() {
   Object.assign(form, { id: null, title: '', genre: '', library: '' })
 }
+
 function openEdit(book) {
   if (!isAdmin.value) return
   Object.assign(form, {
@@ -68,17 +69,18 @@ function openEdit(book) {
   })
   dialogs.edit = true
 }
+
 function openDelete(book) {
   if (!isAdmin.value) return
   Object.assign(form, { id: book.id, title: book.title || '' })
   dialogs.delete = true
 }
+
 async function saveForm() {
   if (!isAdmin.value || !form.title || !form.genre || !form.library) {
     showNotification({ visible: true, message: 'Заполните все поля', type: 'warning' })
     return
   }
-  try {
     const url = form.id ? `/books/${form.id}/` : '/books/'
     const method = form.id ? axios.put : axios.post
     await method(url, { title: form.title, genre: form.genre, library: form.library })
@@ -86,38 +88,30 @@ async function saveForm() {
     resetForm()
     await loadData()
     showNotification({ visible: true, message: form.id ? 'Сохранено' : 'Добавлено', type: 'success' })
-  } catch (err) {
-    handleApiError(err, 'Ошибка сохранения', showNotification)
-  }
 }
+
 async function deleteBook() {
   if (!isAdmin.value || !form.id) return
-  try {
+
     await axios.delete(`/books/${form.id}/`)
     dialogs.delete = false
     resetForm()
     await loadData()
     showNotification({ visible: true, message: 'Удалено', type: 'danger' })
-  } catch (err) {
-    handleApiError(err, 'Ошибка удаления', showNotification)
-  }
 }
 
 async function exportFile(type) {
   if (!isAdmin.value) return
-  try {
     const res = await axios.get('/books/export/', {
       params: { type }, responseType: 'blob'
     })
     const url = URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
     a.href = url
-    a.download = `Books.${type === 'excel' ? 'xlsx' : 'docx'}` 
+    a.download = `Books.${type === 'excel' ? 'xlsx' : 'docx'}`
     a.click()
     URL.revokeObjectURL(url)
-  } catch (err) {
-    handleApiError(err, `Ошибка экспорта ${type}`, showNotification)
-  }
+
 }
 
 onMounted(loadData)
@@ -137,18 +131,22 @@ onMounted(loadData)
               </div>
             </div>
             <div class="d-flex gap-2" v-if="isAdmin">
-              <v-btn @click="exportFile('excel')" color="success" variant="outlined" prepend-icon="mdi-microsoft-excel">Excel</v-btn>
-              <v-btn @click="exportFile('word')" color="indigo" variant="outlined" prepend-icon="mdi-file-word">Word</v-btn>
+              <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" @click="dialogs.add = true">Добавить
+                книгу</v-btn>
+              <v-btn @click="exportFile('excel')" color="success" variant="outlined"
+                prepend-icon="mdi-microsoft-excel">Excel</v-btn>
+              <v-btn @click="exportFile('word')" color="indigo" variant="outlined"
+                prepend-icon="mdi-file-word">Word</v-btn>
             </div>
           </div>
 
-          <v-text-field v-model="searchQuery" label="Поиск по книгам" variant="outlined" 
-            clearable prepend-inner-icon="mdi-magnify" density="comfortable" class="mb-4" />
-          
-          <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" 
-            @click="dialogs.add = true" class="mb-4">Добавить книгу</v-btn>
+          <div class="d-flex align-center mb-4 gap-4">
+            <v-text-field v-model="searchQuery" label="Поиск по книгам" variant="outlined" clearable
+              prepend-inner-icon="mdi-magnify" density="comfortable" class="flex-grow-1" />
+          </div>
 
-          <v-data-table :headers="headers" :items="filteredBooks" item-key="id" :items-per-page="10" class="elevation-1">
+          <v-data-table :headers="headers" :items="filteredBooks" item-key="id" :items-per-page="10"
+            v-model:sort-by="sortBy" class="elevation-1">
             <template #item.status="{ item }">
               <v-chip :color="item.status === 'Доступна' ? 'success' : 'orange'" variant="flat">
                 {{ item.status }}
@@ -156,8 +154,10 @@ onMounted(loadData)
             </template>
             <template #item.actions="{ item }">
               <div v-if="isAdmin" class="d-flex gap-1">
-                <v-btn variant="text" color="primary" prepend-icon="mdi-pencil" @click="openEdit(item)" size="small"></v-btn>
-                <v-btn variant="text" color="error" prepend-icon="mdi-delete" @click="openDelete(item)" size="small"></v-btn>
+                <v-btn variant="text" color="primary" prepend-icon="mdi-pencil" @click="openEdit(item)"
+                  size="small"></v-btn>
+                <v-btn variant="text" color="error" prepend-icon="mdi-delete" @click="openDelete(item)"
+                  size="small"></v-btn>
               </div>
             </template>
             <template #no-data>
@@ -178,8 +178,10 @@ onMounted(loadData)
         <v-card-title>Добавить книгу</v-card-title>
         <v-card-text>
           <v-text-field v-model="form.title" label="Название" variant="outlined" density="comfortable" class="mb-3" />
-          <v-select v-model="form.genre" :items="genres" item-value="id" item-title="name" label="Жанр" variant="outlined" density="comfortable" class="mb-3" />
-          <v-select v-model="form.library" :items="libraries" item-value="id" item-title="name" label="Библиотека" variant="outlined" density="comfortable" />
+          <v-select v-model="form.genre" :items="genres" item-value="id" item-title="name" label="Жанр"
+            variant="outlined" density="comfortable" class="mb-3" />
+          <v-select v-model="form.library" :items="libraries" item-value="id" item-title="name" label="Библиотека"
+            variant="outlined" density="comfortable" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -194,8 +196,10 @@ onMounted(loadData)
         <v-card-title>Редактировать книгу</v-card-title>
         <v-card-text>
           <v-text-field v-model="form.title" label="Название" variant="outlined" density="comfortable" class="mb-3" />
-          <v-select v-model="form.genre" :items="genres" item-value="id" item-title="name" label="Жанр" variant="outlined" density="comfortable" class="mb-3" />
-          <v-select v-model="form.library" :items="libraries" item-value="id" item-title="name" label="Библиотека" variant="outlined" density="comfortable" />
+          <v-select v-model="form.genre" :items="genres" item-value="id" item-title="name" label="Жанр"
+            variant="outlined" density="comfortable" class="mb-3" />
+          <v-select v-model="form.library" :items="libraries" item-value="id" item-title="name" label="Библиотека"
+            variant="outlined" density="comfortable" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />

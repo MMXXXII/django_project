@@ -16,35 +16,26 @@ const notification = reactive({ visible: false, message: '', type: 'success' })
 
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
+const showAddDialog = ref(false)
 
 const libraryToAdd = reactive({ name: '' })
 const libraryToEdit = reactive({ id: null, name: '' })
 const libraryToDelete = reactive({ id: null, name: '' })
 
 async function loadUser() {
-  try {
     const res = await axios.get('/userprofile/info/')
     user.value = res.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось получить информацию о пользователе', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadLibraries() {
-  try {
     const res = await axios.get('/libraries/')
     libraries.value = res.data
     filterAndSort()
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить список библиотек', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadLibraryStats() {
-  try {
     const res = await axios.get('/libraries/stats/')
     libraryStats.value = res.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить статистику', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
 
 function filterAndSort() {
@@ -69,19 +60,16 @@ async function addLibrary() {
 
   const name = libraryToAdd.name.trim()
   if (!name) {
-    showNotification(notification, 'Введите название библиотеки', 'warning')
+    showNotification({ visible: true, message: 'Введите название библиотеки', type: 'warning' })
     return
   }
 
-  try {
     await axios.post('/libraries/', { name })
     libraryToAdd.name = ''
     await loadLibraries()
     await loadLibraryStats()
-    showNotification(notification, 'Библиотека добавлена', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при добавлении библиотеки', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
+    showNotification({ visible: true, message: 'Библиотека добавлена', type: 'success' })
+    showAddDialog.value = false
 }
 
 function openEditDialog(lib) {
@@ -90,24 +78,21 @@ function openEditDialog(lib) {
   libraryToEdit.name = lib.name || ''
   showEditDialog.value = true
 }
+
 async function updateLibrary() {
   if (!isAdmin.value || !libraryToEdit.id) return
 
   const name = libraryToEdit.name.trim()
   if (!name) {
-    showNotification(notification, 'Название библиотеки не может быть пустым', 'warning')
+    showNotification({ visible: true, message: 'Название библиотеки не может быть пустым', type: 'warning' })
     return
   }
 
-  try {
     await axios.put(`/libraries/${libraryToEdit.id}/`, { name })
     showEditDialog.value = false
     await loadLibraries()
     await loadLibraryStats()
-    showNotification(notification, 'Изменения сохранены', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при обновлении библиотеки', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
+    showNotification({ visible: true, message: 'Изменения сохранены', type: 'success' })
 }
 
 function openDeleteDialog(lib) {
@@ -116,24 +101,20 @@ function openDeleteDialog(lib) {
   libraryToDelete.name = lib.name || ''
   showDeleteDialog.value = true
 }
+
 async function deleteLibrary() {
   if (!isAdmin.value || !libraryToDelete.id) return
 
-  try {
     await axios.delete(`/libraries/${libraryToDelete.id}/`)
     showDeleteDialog.value = false
     await loadLibraries()
     await loadLibraryStats()
-    showNotification(notification, 'Библиотека удалена', 'danger')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении библиотеки', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
+    showNotification({ visible: true, message: 'Библиотека удалена', type: 'danger' })
 }
 
 async function exportLibraries(type = 'excel') {
   if (!isAdmin.value) return
 
-  try {
     const res = await axios.get('/libraries/export/', { params: { type }, responseType: 'blob' })
     const url = window.URL.createObjectURL(new Blob([res.data]))
     const link = document.createElement('a')
@@ -142,11 +123,7 @@ async function exportLibraries(type = 'excel') {
     document.body.appendChild(link)
     link.click()
     link.remove()
-
-    showNotification(notification, 'Файл скачивается', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при экспорте', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
+    showNotification({ visible: true, message: 'Файл скачивается', type: 'success' })
 }
 
 onMounted(async () => {
@@ -170,6 +147,7 @@ onMounted(async () => {
               </div>
             </div>
             <div class="d-flex gap-2" v-if="isAdmin">
+              <v-btn color="primary" prepend-icon="mdi-plus" @click="showAddDialog = true">Добавить библиотеку</v-btn>
               <v-btn color="success" variant="outlined" prepend-icon="mdi-microsoft-excel" @click="exportLibraries('excel')">Excel</v-btn>
               <v-btn color="indigo" variant="outlined" prepend-icon="mdi-file-word" @click="exportLibraries('word')">Word</v-btn>
             </div>
@@ -194,10 +172,7 @@ onMounted(async () => {
             <v-col cols="12" md="6" class="pl-2">
               <v-select
                 v-model="sortOrder"
-                :items="[
-                  { title: 'От A до Я', value: 'asc' },
-                  { title: 'От Я до A', value: 'desc' },
-                ]"
+                :items="[ { title: 'От A до Я', value: 'asc' }, { title: 'От Я до A', value: 'desc' } ]"
                 item-title="title"
                 item-value="value"
                 label="Сортировка"
@@ -205,22 +180,6 @@ onMounted(async () => {
                 density="comfortable"
                 @update:model-value="filterAndSort"
               />
-            </v-col>
-          </v-row>
-
-          <v-row v-if="isAdmin" class="mb-4" no-gutters>
-            <v-col cols="12" md="8" class="pr-2">
-              <v-text-field
-                v-model="libraryToAdd.name"
-                label="Новая библиотека"
-                variant="outlined"
-                density="compact"
-                hide-details
-                @keyup.enter="addLibrary"
-              />
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-btn color="primary" block height="40" prepend-icon="mdi-plus" @click="addLibrary">Добавить библиотеку</v-btn>
             </v-col>
           </v-row>
 
@@ -243,7 +202,20 @@ onMounted(async () => {
       </v-col>
     </v-row>
 
-    <v-dialog v-if="isAdmin" v-model="showEditDialog" max-width="420">
+    <v-dialog v-model="showAddDialog" max-width="420" v-if="isAdmin">
+      <v-card>
+        <v-card-title>Добавить библиотеку</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="libraryToAdd.name" label="Название библиотеки" variant="outlined" density="comfortable" />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="showAddDialog = false">Отмена</v-btn>
+          <v-btn color="primary" @click="addLibrary">Добавить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="showEditDialog" max-width="420" v-if="isAdmin">
       <v-card>
         <v-card-title>Редактировать библиотеку</v-card-title>
         <v-card-text>
@@ -256,7 +228,7 @@ onMounted(async () => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-if="isAdmin" v-model="showDeleteDialog" max-width="420">
+    <v-dialog v-model="showDeleteDialog" max-width="420" v-if="isAdmin">
       <v-card>
         <v-card-title class="text-h6">Удалить библиотеку</v-card-title>
         <v-card-text>Вы уверены, что хотите удалить библиотеку <strong>{{ libraryToDelete.name }}</strong>?</v-card-text>

@@ -10,22 +10,25 @@ const genreStats = ref(null)
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
-const dialogs = reactive({ edit: false, delete: false })
+const dialogs = reactive({ add: false, edit: false, delete: false })
 const form = reactive({ id: null, name: '' })
 
 const filteredGenres = computed(() => {
-  let list = genres.value.slice()
-  const q = searchQuery.value.trim().toLowerCase()
-  if (q) list = list.filter(g => (g.name || '').toLowerCase().includes(q))
-  return list.sort((a, b) =>
-    sortOrder.value === 'asc'
-      ? a.name.localeCompare(b.name)
-      : b.name.localeCompare(a.name)
-  )
+  let list = genres.value;
+  if (searchQuery.value) {
+    list = list.filter(g => g.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
+  }
+
+  return list.sort((a, b) => {
+    if (sortOrder.value === 'asc') {
+      return a.name.localeCompare(b.name)
+    } else {
+      return b.name.localeCompare(a.name)
+    }
+  });
 })
 
 async function loadData() {
-  try {
     const [userRes, genresRes, statsRes] = await Promise.all([
       axios.get('/userprofile/info/'),
       axios.get('/genres/'),
@@ -34,68 +37,95 @@ async function loadData() {
     user.value = userRes.data
     genres.value = genresRes.data
     genreStats.value = statsRes.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить данные', showNotification)
-  }
 }
 
 function resetForm() {
   Object.assign(form, { id: null, name: '' })
 }
+
 function openEdit(genre) {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return;
+  }
   Object.assign(form, { id: genre.id, name: genre.name || '' })
   dialogs.edit = true
 }
+
 function openDelete(genre) {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return;
+  }
   Object.assign(form, { id: genre.id, name: genre.name || '' })
   dialogs.delete = true
 }
+
+function openAdd() {
+  if (!isAdmin.value) {
+    return;
+  }
+  dialogs.add = true
+}
+
 async function saveForm() {
   const name = form.name.trim()
+
   if (!name || !isAdmin.value) {
     showNotification({ visible: true, message: 'Введите название жанра', type: 'warning' })
     return
   }
-  try {
-    const url = form.id ? `/genres/${form.id}/` : '/genres/'
-    const method = form.id ? axios.put : axios.post
+
+    let url = '/genres/'
+    let method = axios.post
+
+    if (form.id) {
+      url = `/genres/${form.id}/`
+      method = axios.put
+    }
+
     await method(url, { name })
+
     dialogs.edit = false
+    dialogs.add = false
     resetForm()
     await loadData()
-    showNotification({ visible: true, message: form.id ? 'Сохранено' : 'Добавлено', type: 'success' })
-  } catch (err) {
-    handleApiError(err, 'Ошибка сохранения', showNotification)
-  }
+
+    let message
+    if (form.id) {
+      message = 'Сохранено'
+    } else {
+      message = 'Добавлено'
+    }
+
+    showNotification({ visible: true, message: message, type: 'success' })
 }
+
 async function deleteGenre() {
-  if (!isAdmin.value || !form.id) return
-  try {
+  if (!isAdmin.value || !form.id) {
+    return
+  }
+
     await axios.delete(`/genres/${form.id}/`)
     dialogs.delete = false
     resetForm()
     await loadData()
     showNotification({ visible: true, message: 'Удалено', type: 'danger' })
-  } catch (err) {
-    handleApiError(err, 'Ошибка удаления', showNotification)
-  }
 }
 
 async function exportFile(type) {
-  if (!isAdmin.value) return
-  try {
-    const res = await axios.get('/genres/export/', { params: { type }, responseType: 'blob' })
+  if (!isAdmin.value) {
+    return
+  }
+
+    const res = await axios.get('/genres/export/', { 
+      params: { type }, 
+      responseType: 'blob' 
+    })
     const url = URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
     a.href = url
     a.download = `genres.${type === 'excel' ? 'xlsx' : 'docx'}`
     a.click()
     URL.revokeObjectURL(url)
-  } catch (err) {
-    handleApiError(err, 'Ошибка экспорта', showNotification)
-  }
 }
 
 onMounted(loadData)
@@ -115,6 +145,7 @@ onMounted(loadData)
               </div>
             </div>
             <div class="d-flex gap-2" v-if="isAdmin">
+              <v-btn color="primary" prepend-icon="mdi-plus" @click="openAdd">Добавить жанр</v-btn>
               <v-btn @click="exportFile('excel')" color="success" variant="outlined" prepend-icon="mdi-microsoft-excel">
                 Excel
               </v-btn>
@@ -125,22 +156,16 @@ onMounted(loadData)
           </div>
 
           <v-row class="mb-4" align="center">
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="6" class="pr-2">
               <v-text-field v-model="searchQuery" label="Поиск по жанрам" variant="outlined" clearable 
                 prepend-inner-icon="mdi-magnify" density="comfortable" />
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col cols="12" md="6" class="pl-2">
               <v-select v-model="sortOrder"
                 :items="[{ title: 'От A до Я', value: 'asc' }, { title: 'От Я до A', value: 'desc' }]"
                 item-title="title" item-value="value" label="Сортировка" variant="outlined" density="comfortable" />
             </v-col>
-            <v-col cols="12" md="5" v-if="isAdmin" class="d-flex gap-2">
-              <v-text-field v-model="form.name" label="Новый жанр" variant="outlined" density="comfortable"
-                @keyup.enter="saveForm" />
-              <v-btn color="primary" prepend-icon="mdi-plus" @click="saveForm" height="48">Добавить жанр</v-btn>
-            </v-col>
           </v-row>
-
 
           <v-list lines="one">
             <v-list-item v-for="genre in filteredGenres" :key="genre.id" :title="genre.name">
@@ -161,6 +186,20 @@ onMounted(loadData)
         </v-card>
       </v-col>
     </v-row>
+
+    <v-dialog v-model="dialogs.add" max-width="420" v-if="isAdmin">
+      <v-card>
+        <v-card-title>Добавить жанр</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="form.name" label="Название жанра" variant="outlined" density="comfortable" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="dialogs.add = false">Отмена</v-btn>
+          <v-btn color="primary" @click="saveForm">Добавить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-dialog v-model="dialogs.edit" max-width="420" v-if="isAdmin">
       <v-card>

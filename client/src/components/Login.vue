@@ -6,22 +6,6 @@ import { useUserStore } from '../stores/userStore'
 const router = useRouter()
 const userStore = useUserStore()
 
-onMounted(async () => {
-  try {
-    if (!userStore.isAuthenticated) {
-      router.push('/login')
-    }
-  } catch (err) {
-    console.error('Ошибка при загрузке профиля:', err)
-    router.push('/login')
-  }
-})
-
-async function handleLogout() {
-  await userStore.logout()
-  router.push('/login')
-}
-
 const username = ref('')
 const password = ref('')
 const otpCode = ref('')
@@ -32,23 +16,25 @@ const otpTimer = ref(300)
 let timerInterval = null
 
 const formattedOtpTime = computed(() => {
-  const m = Math.floor(otpTimer.value / 60).toString().padStart(2, '0')
-  const s = (otpTimer.value % 60).toString().padStart(2, '0')
-  return `${m}:${s}`
-})
+  const m = otpTimer.value / 60 | 0; 
+  const s = otpTimer.value % 60;
+  return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+});
+
 
 function startOtpTimer() {
-  otpTimer.value = 300
-  timerInterval = setInterval(() => {
-    otpTimer.value--
+  otpTimer.value = 300;
+  timerInterval = setInterval(function() {
+    otpTimer.value--;
+
     if (otpTimer.value <= 0) {
-      clearInterval(timerInterval)
-      timerInterval = null
-      showOtpInput.value = false
-      otpCode.value = ''
-      userStore.error = 'Время ввода OTP истекло'
+      clearInterval(timerInterval);
+      timerInterval = null;
+      showOtpInput.value = false;
+      otpCode.value = '';
+      userStore.error = 'Время ввода OTP истекло';
     }
-  }, 1000)
+  }, 1000);
 }
 
 function stopOtpTimer() {
@@ -59,20 +45,15 @@ function stopOtpTimer() {
 }
 
 async function handleLogin() {
-  try {
     const result = await userStore.login(username.value, password.value)
     userEmail.value = result.email
     showOtpInput.value = true
     userStore.error = null
     stopOtpTimer()
     startOtpTimer()
-  } catch (err) {
-    console.error('Ошибка при входе:', err)
-  }
 }
 
 async function handleOtpSubmit() {
-  try {
     const success = await userStore.verifyOtp(otpCode.value)
     if (success) {
       stopOtpTimer()
@@ -83,9 +64,6 @@ async function handleOtpSubmit() {
       router.push('/books')
       window.location.reload()
     }
-  } catch (err) {
-    console.error('Ошибка при проверке OTP:', err)
-  }
 }
 
 function handleBack() {
@@ -97,6 +75,16 @@ function handleBack() {
   userStore.error = null
 }
 
+onMounted(async () => {
+    if (!userStore.isAuthenticated) {
+      router.push('/login')
+    }
+})
+
+async function handleLogout() {
+  await userStore.logout()
+  router.push('/login')
+}
 
 </script>
 

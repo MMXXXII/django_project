@@ -30,12 +30,8 @@ export function handleApiError(err, fallbackMessage = 'Ошибка', showNotifi
 }
 
 export async function fetchData(url, notificationCallback) {
-  try {
     const r = await axios.get(url);
     return r.data;
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить данные', notificationCallback);
-  }
 }
 
 export function clearTimeoutAndHideModal(modalInstance, modalEl) {
@@ -50,27 +46,6 @@ export function toggleSelection(selectedArray, id) {
   } else {
     selectedArray.push(id);
   }
-}
-
-export function exportData(url, type = 'excel', showNotificationCallback) {
-  axios({
-    url: `${url}?type=${type}`,
-    method: 'GET',
-    responseType: 'blob',
-  })
-    .then((res) => {
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", type === 'excel' ? "data.xlsx" : "data.docx");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showNotificationCallback('Файл сформирован, скачивание началось', 'success');
-    })
-    .catch((err) => {
-      handleApiError(err, 'Ошибка при скачивании файла', showNotificationCallback);
-    });
 }
 
 

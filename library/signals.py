@@ -7,7 +7,6 @@ from .models import Member, Library, UserProfile
 
 @receiver(post_save, sender=User)
 def create_member_profile(sender, instance, created, **kwargs):
-    """Автоматически создаём Member профиль при создании пользователя"""
     if created:
         UserProfile.objects.get_or_create(user=instance)
         

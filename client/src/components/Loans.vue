@@ -1,7 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
-import { showNotification, handleApiError } from '../utils'
 
 const loans = ref([])
 const filteredLoans = ref([])
@@ -25,28 +24,31 @@ const showAddDialog = ref(false)
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 
-const loanToAdd = reactive({ library: null, book: null, loan_date: '' })
+const loanToAdd = reactive({ library: null, book: null, member: null, loan_date: '' })
 const loanToEdit = reactive({ id: null, library: null, book: null, member: null, loan_date: '' })
 const loanToDelete = reactive({ id: null, bookTitle: '', memberName: '' })
 
 function applyFilter() {
   const q = searchQuery.value.trim().toLowerCase()
-  let list = loans.value
 
-  if (q) {
-    list = list.filter(l => {
-      const book = books.value.find(b => b.id === l.book) || {}
-      const member = members.value.find(m => m.id === l.member) || {}
-      const bookTitle = (book.title || '').toLowerCase()
-      const memberName = ((member.first_name || member.username) || '').toLowerCase()
-      return bookTitle.includes(q) || memberName.includes(q)
-    })
-  }
+  const list = loans.value.filter(l => {
+    const book = books.value.find(b => b.id === l.book) || {}
+    const member = members.value.find(m => m.id === l.member) || {}
+    const bookTitle = (book.title || '').toLowerCase()
+    const memberName = ((member.first_name || member.username) || '').toLowerCase()
 
-  list = list.slice().sort((a, b) => {
+    return bookTitle.includes(q) || memberName.includes(q)
+  })
+
+  list.sort((a, b) => {
     const aTitle = (books.value.find(bk => bk.id === a.book)?.title || '').toLowerCase()
     const bTitle = (books.value.find(bk => bk.id === b.book)?.title || '').toLowerCase()
-    return sortOrder.value === 'asc' ? aTitle.localeCompare(bTitle) : bTitle.localeCompare(aTitle)
+    
+    if (sortOrder.value === 'asc') {
+      return aTitle.localeCompare(bTitle)
+    } else {
+      return bTitle.localeCompare(aTitle)
+    }
   })
 
   filteredLoans.value = list
@@ -54,43 +56,59 @@ function applyFilter() {
 }
 
 function getMemberName(id) {
-  const mem = members.value.find(m => m.id === id) || currentMember.value || {}
-  return mem.first_name || mem.username || 'Неизвестно'
+  const mem = members.value.find(m => m.id === id);
+  if (!mem) {
+    return currentMember.value.first_name || currentMember.value.username || 'Неизвестно';
+  }
+  return mem.first_name || mem.username || 'Неизвестно';
 }
+
 function getLibraryName(bookId) {
-  const book = books.value.find(b => b.id === bookId)
-  if (!book) return ''
-  const lib = libraries.value.find(l => l.id === book.library)
-  return lib?.name || ''
+  const book = books.value.find(b => b.id === bookId);
+  if (!book) {
+    return '';
+  }
+  const lib = libraries.value.find(l => l.id === book.library);
+  return lib ? lib.name : '';
 }
+
 function getBookTitle(bookId) {
-  return books.value.find(b => b.id === bookId)?.title || ''
+  const book = books.value.find(b => b.id === bookId);
+  return book ? book.title : '';
 }
 
 function availableBooksToAdd() {
-  if (!loanToAdd.library) return books.value.filter(b => b.is_available)
-  return books.value.filter(b => b.is_available && b.library === loanToAdd.library)
-}
-function availableBooksToEdit() {
-  if (!loanToEdit.library) return books.value.filter(b => b.is_available)
-  return books.value.filter(b => b.is_available && b.library === loanToEdit.library)
+  const library = loanToAdd.library;
+  if (!library) {
+    return books.value.filter(b => b.is_available);
+  }
+  return books.value.filter(b => b.is_available && b.library === library);
 }
 
-function onLibraryChange() { loanToAdd.book = null }
-function onEditLibraryChange() { loanToEdit.book = null }
+function availableBooksToEdit() {
+  const library = loanToEdit.library;
+  if (!library) {
+    return books.value.filter(b => b.is_available);
+  }
+  return books.value.filter(b => b.is_available && b.library === library);
+}
+
+function onLibraryChange() {
+  loanToAdd.book = null;
+}
+
+function onEditLibraryChange() {
+  loanToEdit.book = null;
+}
 
 async function loadUser() {
-  try {
     const r = await axios.get('/userprofile/info/')
     user.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось получить информацию о пользователе', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadCurrentMember() {
-  try {
     const r = await axios.get('/library-members/')
-    if (r.data?.length) {
+    if (r.data && r.data.length) {
       if (isAdmin.value) {
         members.value = r.data
       } else {
@@ -98,137 +116,142 @@ async function loadCurrentMember() {
         members.value = r.data
       }
     }
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить читателей', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadLibraries() {
-  try {
     const r = await axios.get('/libraries/')
     libraries.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить библиотеки', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadBooks() {
-  try {
     const r = await axios.get('/books/')
     books.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить книги', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadLoans() {
-  try {
     const r = await axios.get('/loans/')
     loans.value = r.data
     applyFilter()
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить список выдач', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 async function loadLoanStats() {
-  try {
     const r = await axios.get('/loans/stats/')
     loanStats.value = r.data
-  } catch (err) {
-    handleApiError(err, 'Не удалось загрузить статистику', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
 
 async function addLoan() {
   if (!loanToAdd.book || !loanToAdd.loan_date) {
-    showNotification(notification, 'Заполните все поля', 'warning')
     return
   }
-  if (!currentMember.value?.id) {
-    showNotification(notification, 'У вас нет профиля читателя', 'warning')
+
+  const memberId = isAdmin.value ? loanToAdd.member : currentMember.value?.id;
+  
+  if (!memberId) {
     return
   }
-  try {
-    await axios.post('/loans/', { book: loanToAdd.book, member: currentMember.value.id, loan_date: loanToAdd.loan_date })
+
+    await axios.post('/loans/', {
+      book: loanToAdd.book,
+      member: memberId,
+      loan_date: loanToAdd.loan_date
+    })
+    
     loanToAdd.library = null
     loanToAdd.book = null
+    loanToAdd.member = null
     loanToAdd.loan_date = ''
+    
     showAddDialog.value = false
+    
     await Promise.all([loadBooks(), loadLoans(), loadLoanStats()])
-    showNotification(notification, 'Выдача добавлена', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при добавлении выдачи', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
 }
+
 function openEditDialog(loan) {
-  if (!isAdmin.value) return
-  const book = books.value.find(b => b.id === loan.book)
-  loanToEdit.id = loan.id
-  loanToEdit.library = book ? book.library : null
-  loanToEdit.book = loan.book
-  loanToEdit.member = loan.member
-  loanToEdit.loan_date = loan.loan_date
-  showEditDialog.value = true
+  if (!isAdmin.value) {
+    return;
+  }
+
+  const book = books.value.find(b => b.id === loan.book);
+  
+  loanToEdit.id = loan.id;
+  loanToEdit.library = book ? book.library : null;
+  loanToEdit.book = loan.book;
+  loanToEdit.member = loan.member;
+  loanToEdit.loan_date = loan.loan_date;
+  
+  showEditDialog.value = true;
 }
+
+
 async function updateLoan() {
-  if (!isAdmin.value || !loanToEdit.id) return
-  try {
-    await axios.put(`/loans/${loanToEdit.id}/`, { book: loanToEdit.book, member: loanToEdit.member, loan_date: loanToEdit.loan_date })
-    showEditDialog.value = false
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()])
-    showNotification(notification, 'Изменения сохранены', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при обновлении выдачи', (msg, type = 'danger') => showNotification(notification, msg, type))
+  if (!isAdmin.value || !loanToEdit.id) {
+    return;
   }
+    const data = {
+      book: loanToEdit.book,
+      member: loanToEdit.member,
+      loan_date: loanToEdit.loan_date
+    };
+    await axios.put(`/loans/${loanToEdit.id}/`, data);
+    showEditDialog.value = false;
+    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
 }
+
 function openDeleteDialog(loan) {
-  if (!isAdmin.value) return
-  loanToDelete.id = loan.id
-  loanToDelete.bookTitle = getBookTitle(loan.book)
-  loanToDelete.memberName = getMemberName(loan.member)
-  showDeleteDialog.value = true
+  if (!isAdmin.value) {
+    return;
+  }
+  loanToDelete.id = loan.id;
+  loanToDelete.bookTitle = getBookTitle(loan.book);
+  loanToDelete.memberName = getMemberName(loan.member);
+  
+  showDeleteDialog.value = true;
 }
+
 async function deleteLoan() {
-  if (!isAdmin.value || !loanToDelete.id) return
-  try {
-    await axios.delete(`/loans/${loanToDelete.id}/`)
-    showDeleteDialog.value = false
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()])
-    showNotification(notification, 'Выдача удалена', 'danger')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при удалении выдачи', (msg, type = 'danger') => showNotification(notification, msg, type))
+  if (!isAdmin.value || !loanToDelete.id) {
+    return;
   }
+    await axios.delete(`/loans/${loanToDelete.id}/`);
+    showDeleteDialog.value = false;
+    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
 }
+
 async function returnBook(loan) {
-  try {
-    await axios.post(`/loans/${loan.id}/return/`)
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()])
-    showNotification(notification, 'Книга возвращена', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при возврате книги', (msg, type = 'danger') => showNotification(notification, msg, type))
-  }
+    await axios.post(`/loans/${loan.id}/return/`);
+    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
+
 }
+
 async function exportLoans(type = 'excel') {
-  if (!isAdmin.value) return
-  try {
-    const res = await axios.get('/loans/export/', { params: { type }, responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = type === 'excel' ? 'loans.xlsx' : 'loans.docx'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-    showNotification(notification, 'Файл скачивается', 'success')
-  } catch (err) {
-    handleApiError(err, 'Ошибка при экспорте', (msg, type = 'danger') => showNotification(notification, msg, type))
+  if (!isAdmin.value) {
+    return;
   }
+
+    const res = await axios.get('/loans/export/', { 
+      params: { type }, 
+      responseType: 'blob' 
+    });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = type === 'excel' ? 'loans.xlsx' : 'loans.docx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
 }
 
 const paginatedLoans = computed(() => {
-  const start = (page.value -1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredLoans.value.slice(start, end)
-})
-const totalPages = computed(() => Math.ceil(filteredLoans.value.length / itemsPerPage.value))
+  const start = (page.value - 1) * itemsPerPage.value;
+  const end = start + itemsPerPage.value;
+  return filteredLoans.value.slice(start, end);
+});
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredLoans.value.length / itemsPerPage.value);
+});
+
 
 onMounted(async () => {
   await loadUser()
@@ -236,8 +259,8 @@ onMounted(async () => {
   await loadLoans()
   await loadLoanStats()
 })
-
 </script>
+
 
 <template>
   <v-container fluid>
@@ -252,9 +275,12 @@ onMounted(async () => {
                 читатель с максимальным количеством книг: {{ loanStats?.topReader?.name || 'не найден' }}
               </div>
             </div>
-            <div class="d-flex gap-2" v-if="isAdmin">
-              <v-btn color="success" variant="outlined" prepend-icon="mdi-microsoft-excel" @click="exportLoans('excel')">Excel</v-btn>
-              <v-btn color="indigo" variant="outlined" prepend-icon="mdi-file-word" @click="exportLoans('word')">Word</v-btn>
+            <div class="d-flex gap-2">
+              <v-btn v-if="isAdmin" color="primary" prepend-icon="mdi-plus" @click="showAddDialog = true">
+                Добавить выдачу
+              </v-btn>
+              <v-btn v-if="isAdmin" color="success" variant="outlined" prepend-icon="mdi-microsoft-excel" @click="exportLoans('excel')">Excel</v-btn>
+              <v-btn v-if="isAdmin" color="indigo" variant="outlined" prepend-icon="mdi-file-word" @click="exportLoans('word')">Word</v-btn>
             </div>
           </div>
 
@@ -336,7 +362,7 @@ onMounted(async () => {
       </v-col>
     </v-row>
 
-    <v-dialog v-if="isAdmin" v-model="showAddDialog" max-width="520">
+    <v-dialog v-model="showAddDialog" max-width="520">
       <v-card>
         <v-card-title>Добавить выдачу</v-card-title>
         <v-card-text>
