@@ -199,7 +199,7 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
         if self.request.user.is_superuser:
             return qs
         
-        return qs.filter(user=self.request.user)
+        return qs.filter(member__user=self.request.user)
 
     @action(detail=True, methods=['post'], url_path='return')
     def return_book(self, request, pk=None):

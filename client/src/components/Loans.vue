@@ -129,9 +129,15 @@ async function loadBooks() {
 }
 
 async function loadLoans() {
-    const r = await axios.get('/loans/')
-    loans.value = r.data
-    applyFilter()
+    const r = await axios.get('/loans/');
+    
+    if (!isAdmin.value && currentMember.value) {
+        loans.value = r.data.filter(loan => loan.member === currentMember.value.id);
+    } else {
+        loans.value = r.data;
+    }
+    
+    applyFilter();
 }
 
 async function loadLoanStats() {
@@ -314,10 +320,7 @@ onMounted(async () => {
               <v-text-field v-model="loanToAdd.loan_date" type="date" label="Дата выдачи" variant="outlined" density="comfortable"
                 hide-details />
             </v-col>
-            <v-col cols="2">
-              <v-btn color="primary" block size="large" prepend-icon="mdi-plus" @click="addLoan">
-                Добавить
-              </v-btn>
+            <v-col cols="2" >
             </v-col>
           </v-row>
 

@@ -6,11 +6,13 @@ import { useUserStore } from '../stores/userStore'
 const router = useRouter()
 const userStore = useUserStore()
 
+
 onMounted(() => {
   if (!userStore.isAuthenticated) {
     router.push('/login')
   }
 })
+
 
 async function handleLogout() {
   await userStore.logout()

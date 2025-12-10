@@ -1,10 +1,11 @@
-import { ref } from 'vue'
+import { ref } from 'vue';
 
 export function showNotification(notification, msg, type = "success", duration = 2000) {
   if (notification._timeoutId) {
     clearTimeout(notification._timeoutId);
     notification._timeoutId = null;
   }
+  
   notification.message = msg;
   notification.type = type;
   notification.visible = true;
@@ -15,10 +16,10 @@ export function showNotification(notification, msg, type = "success", duration =
   }, duration);
 }
 
-export const dataReloadTrigger = ref(0)
+export const dataReloadTrigger = ref(0);
 
 export function triggerDataReload() {
-  dataReloadTrigger.value++
+  dataReloadTrigger.value = dataReloadTrigger.value + 1;
 }
 
 export function handleApiError(err, fallbackMessage = 'Ошибка', showNotificationCallback) {
@@ -29,23 +30,25 @@ export function handleApiError(err, fallbackMessage = 'Ошибка', showNotifi
   }
 }
 
-export async function fetchData(url, notificationCallback) {
-    const r = await axios.get(url);
-    return r.data;
+export async function fetchData(url) {
+  const response = await axios.get(url);
+  return response.data;
 }
 
-export function clearTimeoutAndHideModal(modalInstance, modalEl) {
-  if (modalInstance) modalInstance.hide();
-  document.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
+export function clearTimeoutAndHideModal(modalInstance) {
+  if (modalInstance) {
+    modalInstance.hide();
+  }
+  document.querySelectorAll(".modal-backdrop").forEach(function(el) {
+    el.remove();
+  });
 }
 
 export function toggleSelection(selectedArray, id) {
-  const idx = selectedArray.indexOf(id);
-  if (idx >= 0) {
-    selectedArray.splice(idx, 1);
+  const index = selectedArray.indexOf(id);
+  if (index >= 0) {
+    selectedArray.splice(index, 1);
   } else {
     selectedArray.push(id);
   }
 }
-
-

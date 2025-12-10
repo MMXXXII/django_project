@@ -28,6 +28,7 @@ const filteredGenres = computed(() => {
   });
 })
 
+
 async function loadData() {
     const [userRes, genresRes, statsRes] = await Promise.all([
       axios.get('/userprofile/info/'),
@@ -39,9 +40,11 @@ async function loadData() {
     genreStats.value = statsRes.data
 }
 
+
 function resetForm() {
   Object.assign(form, { id: null, name: '' })
 }
+
 
 function openEdit(genre) {
   if (!isAdmin.value) {
@@ -51,6 +54,7 @@ function openEdit(genre) {
   dialogs.edit = true
 }
 
+
 function openDelete(genre) {
   if (!isAdmin.value) {
     return;
@@ -59,12 +63,14 @@ function openDelete(genre) {
   dialogs.delete = true
 }
 
+
 function openAdd() {
   if (!isAdmin.value) {
     return;
   }
   dialogs.add = true
 }
+
 
 async function saveForm() {
   const name = form.name.trim()
@@ -99,6 +105,7 @@ async function saveForm() {
     showNotification({ visible: true, message: message, type: 'success' })
 }
 
+
 async function deleteGenre() {
   if (!isAdmin.value || !form.id) {
     return
@@ -110,6 +117,7 @@ async function deleteGenre() {
     await loadData()
     showNotification({ visible: true, message: 'Удалено', type: 'danger' })
 }
+
 
 async function exportFile(type) {
   if (!isAdmin.value) {

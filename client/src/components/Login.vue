@@ -37,12 +37,14 @@ function startOtpTimer() {
   }, 1000);
 }
 
+
 function stopOtpTimer() {
   if (timerInterval) {
     clearInterval(timerInterval)
     timerInterval = null
   }
 }
+
 
 async function handleLogin() {
     const result = await userStore.login(username.value, password.value)
@@ -52,6 +54,7 @@ async function handleLogin() {
     stopOtpTimer()
     startOtpTimer()
 }
+
 
 async function handleOtpSubmit() {
     const success = await userStore.verifyOtp(otpCode.value)
@@ -66,6 +69,7 @@ async function handleOtpSubmit() {
     }
 }
 
+
 function handleBack() {
   stopOtpTimer()
   showOtpInput.value = false
@@ -74,6 +78,7 @@ function handleBack() {
   password.value = ''
   userStore.error = null
 }
+
 
 onMounted(async () => {
     if (!userStore.isAuthenticated) {

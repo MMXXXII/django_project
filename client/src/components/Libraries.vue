@@ -22,10 +22,12 @@ const libraryToAdd = reactive({ name: '' })
 const libraryToEdit = reactive({ id: null, name: '' })
 const libraryToDelete = reactive({ id: null, name: '' })
 
+
 async function loadUser() {
     const res = await axios.get('/userprofile/info/')
     user.value = res.data
 }
+
 
 async function loadLibraries() {
     const res = await axios.get('/libraries/')
@@ -33,10 +35,12 @@ async function loadLibraries() {
     filterAndSort()
 }
 
+
 async function loadLibraryStats() {
     const res = await axios.get('/libraries/stats/')
     libraryStats.value = res.data
 }
+
 
 function filterAndSort() {
   let list = libraries.value
@@ -55,6 +59,7 @@ function filterAndSort() {
   filteredLibraries.value = list
 }
 
+
 async function addLibrary() {
   if (!isAdmin.value) return
 
@@ -72,12 +77,14 @@ async function addLibrary() {
     showAddDialog.value = false
 }
 
+
 function openEditDialog(lib) {
   if (!isAdmin.value) return
   libraryToEdit.id = lib.id
   libraryToEdit.name = lib.name || ''
   showEditDialog.value = true
 }
+
 
 async function updateLibrary() {
   if (!isAdmin.value || !libraryToEdit.id) return
@@ -95,12 +102,14 @@ async function updateLibrary() {
     showNotification({ visible: true, message: 'Изменения сохранены', type: 'success' })
 }
 
+
 function openDeleteDialog(lib) {
   if (!isAdmin.value) return
   libraryToDelete.id = lib.id
   libraryToDelete.name = lib.name || ''
   showDeleteDialog.value = true
 }
+
 
 async function deleteLibrary() {
   if (!isAdmin.value || !libraryToDelete.id) return
@@ -111,6 +120,7 @@ async function deleteLibrary() {
     await loadLibraryStats()
     showNotification({ visible: true, message: 'Библиотека удалена', type: 'danger' })
 }
+
 
 async function exportLibraries(type = 'excel') {
   if (!isAdmin.value) return
@@ -125,6 +135,7 @@ async function exportLibraries(type = 'excel') {
     link.remove()
     showNotification({ visible: true, message: 'Файл скачивается', type: 'success' })
 }
+
 
 onMounted(async () => {
   await loadUser()

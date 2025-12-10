@@ -35,6 +35,7 @@ const memberToAdd = reactive({
   is_staff: false,
 })
 
+
 const memberToEdit = reactive({
   id: null,
   username: '',
@@ -45,29 +46,28 @@ const memberToEdit = reactive({
   is_staff: false,
 })
 
+
 const memberToDelete = reactive({
   id: null,
   username: '',
 })
 
+
 async function loadMembers() {
-  try {
     const r = await axios.get('/members/')
     members.value = r.data
     filteredMembers.value = members.value.slice()
-  } catch (err) {
-  }
 }
 
+
 async function loadMemberStats() {
-  try {
     const r = await axios.get('/members/stats/', {
       headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` },
     });
     memberStats.value = r.data;
-  } catch (err) {
-  }
+
 }
+
 
 async function addMember() {
   if (!isAdmin.value) return;
@@ -75,7 +75,6 @@ async function addMember() {
   if (!memberToAdd.username || !memberToAdd.email || !memberToAdd.password) {
     return;
   }
-  try {
     await axios.post('/members/', memberToAdd);
     memberToAdd.username = '';
     memberToAdd.email = '';
@@ -86,9 +85,9 @@ async function addMember() {
     showAddDialog.value = false;
     await loadMembers();
     await loadMemberStats();
-  } catch (err) {
-  }
+
 }
+
 
 function openEditDialog(member) {
   if (!isAdmin.value) {
@@ -105,12 +104,11 @@ function openEditDialog(member) {
   showEditDialog.value = true;
 }
 
+
 async function updateMember() {
   if (!isAdmin.value || !memberToEdit.id) {
     return;
   }
-
-  try {
     await axios.put(`/members/${memberToEdit.id}/`, memberToEdit);
 
     if (!memberToEdit.is_superuser && userStore.isSuperUser) {
@@ -123,10 +121,8 @@ async function updateMember() {
     showEditDialog.value = false;
     await loadMembers();
     await loadMemberStats();
-  } catch (err) {
-
-  }
 }
+
 
 function openDeleteDialog(member) {
   if (!isAdmin.value) {
@@ -137,18 +133,18 @@ function openDeleteDialog(member) {
   showDeleteDialog.value = true;
 }
 
+
 async function deleteMember() {
   if (!isAdmin.value || !memberToDelete.id) {
     return;
   }
-  try {
     await axios.delete(`/members/${memberToDelete.id}/`);
     showDeleteDialog.value = false;
     await loadMembers();
     await loadMemberStats();
-  } catch (err) {
-  }
+
 }
+
 
 async function exportMembers(type = 'excel') {
   if (!isAdmin.value) {
@@ -159,7 +155,6 @@ async function exportMembers(type = 'excel') {
   const fileExtension = fileType === 'excel' ? 'xlsx' : 'docx';
   const urlPath = `/members/export/${fileType}/`;
 
-  try {
     const response = await axios.get(urlPath, { responseType: 'blob' });
 
     const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -172,9 +167,8 @@ async function exportMembers(type = 'excel') {
     link.remove();
     window.URL.revokeObjectURL(url);
     
-  } catch (err) {
-  }
 }
+
 
 onMounted(async () => {
   await loadMembers()

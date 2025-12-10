@@ -29,12 +29,14 @@ const headers = [
   { title: 'Действия', key: 'actions', sortable: false }
 ]
 
+
 const filteredBooks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return !q ? books.value : books.value.filter(b =>
     (b.title || '').toLowerCase().includes(q)
   )
 })
+
 
 async function loadData() {
     const [userRes, booksRes, statsRes, genresRes, libsRes] = await Promise.all([
@@ -56,9 +58,11 @@ async function loadData() {
     libraries.value = libsRes.data
 }
 
+
 function resetForm() {
   Object.assign(form, { id: null, title: '', genre: '', library: '' })
 }
+
 
 function openEdit(book) {
   if (!isAdmin.value) return
@@ -70,11 +74,13 @@ function openEdit(book) {
   dialogs.edit = true
 }
 
+
 function openDelete(book) {
   if (!isAdmin.value) return
   Object.assign(form, { id: book.id, title: book.title || '' })
   dialogs.delete = true
 }
+
 
 async function saveForm() {
   if (!isAdmin.value || !form.title || !form.genre || !form.library) {
@@ -90,6 +96,7 @@ async function saveForm() {
     showNotification({ visible: true, message: form.id ? 'Сохранено' : 'Добавлено', type: 'success' })
 }
 
+
 async function deleteBook() {
   if (!isAdmin.value || !form.id) return
 
@@ -99,6 +106,7 @@ async function deleteBook() {
     await loadData()
     showNotification({ visible: true, message: 'Удалено', type: 'danger' })
 }
+
 
 async function exportFile(type) {
   if (!isAdmin.value) return
@@ -113,6 +121,7 @@ async function exportFile(type) {
     URL.revokeObjectURL(url)
 
 }
+
 
 onMounted(loadData)
 </script>
