@@ -90,7 +90,7 @@ class UserProfileViewSet(GenericViewSet):
                 'timestamp': time.time(),
                 'password': serializer.validated_data['password']
             }, 300)
-            print(f'[v0] OTP код для {user.username}: {otp_code}')
+            print(f'OTP код для {user.username}: {otp_code}')
             return Response({
                 'is_authenticated': False,
                 'username': user.username,
@@ -117,7 +117,6 @@ class UserProfileViewSet(GenericViewSet):
         user = authenticate(username=username, password=pending_data['password'])
         if user:
             login(request, user)
-            cache.set(f'otp_good_{user.id}', True, 600)
             cache.delete(f'otp_pending_{username}')
             return Response({'success': True, 'is_authenticated': True, 'is_superuser': user.is_superuser})
         return Response({'success': False, 'error': 'Ошибка аутентификации'}, status=400)

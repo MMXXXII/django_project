@@ -31,8 +31,7 @@ onMounted(() => {
         Книги
       </v-btn>
 
-      <v-btn v-if="userStore.isAuthenticated && userStore.isSuperUser" class="mx-1 text-black" variant="text"
-        to="/members">
+      <v-btn v-if="userStore.isAuthenticated && userStore.isSuperUser" class="mx-1 text-black" variant="text" to="/members">
         Читатели
       </v-btn>
 

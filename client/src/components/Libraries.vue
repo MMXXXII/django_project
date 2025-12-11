@@ -61,7 +61,9 @@ function filterAndSort() {
 
 
 async function addLibrary() {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return
+  }
 
   const name = libraryToAdd.name.trim()
   if (!name) {
@@ -87,8 +89,9 @@ function openEditDialog(lib) {
 
 
 async function updateLibrary() {
-  if (!isAdmin.value || !libraryToEdit.id) return
-
+  if (!isAdmin.value || !libraryToEdit.id) {
+    return
+  }
   const name = libraryToEdit.name.trim()
   if (!name) {
     showNotification({ visible: true, message: 'Название библиотеки не может быть пустым', type: 'warning' })
@@ -112,7 +115,9 @@ function openDeleteDialog(lib) {
 
 
 async function deleteLibrary() {
-  if (!isAdmin.value || !libraryToDelete.id) return
+  if (!isAdmin.value || !libraryToDelete.id) {
+    return
+  }
 
     await axios.delete(`/libraries/${libraryToDelete.id}/`)
     showDeleteDialog.value = false
@@ -123,7 +128,9 @@ async function deleteLibrary() {
 
 
 async function exportLibraries(type = 'excel') {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return
+  }
 
     const res = await axios.get('/libraries/export/', { params: { type }, responseType: 'blob' })
     const url = window.URL.createObjectURL(new Blob([res.data]))

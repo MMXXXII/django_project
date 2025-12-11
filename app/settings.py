@@ -28,7 +28,6 @@ DEBUG = True
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@yourapp.com'
 
-ALLOWED_HOSTS = []
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173", 

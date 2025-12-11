@@ -10,7 +10,6 @@ const userStore = useUserStore()
 
 const isAdmin = computed(() => userStore.isSuperUser)
 
-const notification = reactive({ visible: false, message: '', type: 'success' })
 
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
@@ -70,7 +69,9 @@ async function loadMemberStats() {
 
 
 async function addMember() {
-  if (!isAdmin.value) return;
+  if (!isAdmin.value) {
+    return
+  }
 
   if (!memberToAdd.username || !memberToAdd.email || !memberToAdd.password) {
     return;

@@ -65,7 +65,9 @@ function resetForm() {
 
 
 function openEdit(book) {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return
+  }
   Object.assign(form, {
     id: book.id, title: book.title || '',
     genre: book.genre?.id || book.genre || '',
@@ -76,7 +78,9 @@ function openEdit(book) {
 
 
 function openDelete(book) {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return
+  }
   Object.assign(form, { id: book.id, title: book.title || '' })
   dialogs.delete = true
 }
@@ -98,7 +102,9 @@ async function saveForm() {
 
 
 async function deleteBook() {
-  if (!isAdmin.value || !form.id) return
+  if (!isAdmin.value) {
+    return
+  }
 
     await axios.delete(`/books/${form.id}/`)
     dialogs.delete = false
@@ -109,7 +115,9 @@ async function deleteBook() {
 
 
 async function exportFile(type) {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) {
+    return
+  }
     const res = await axios.get('/books/export/', {
       params: { type }, responseType: 'blob'
     })

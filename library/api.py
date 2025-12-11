@@ -12,43 +12,68 @@ from library.models import Library, Book, Genre, Member, Loan, UserProfile
 from library.serializers import (LibrarySerializer, BookSerializer, GenreSerializer,MemberSerializer, LoanSerializer, UserSerializer)
 
 
+import io
+from openpyxl import Workbook
+from docx import Document
+from django.http import HttpResponse
+from rest_framework.response import Response
+
+
 class BaseExportMixin:
     def export_queryset(self, queryset, columns, filename_base):
         file_type = self.request.query_params.get('type', 'excel')
 
         if file_type == 'excel':
-            wb = Workbook()
-            ws = wb.active
-            ws.title = filename_base
-            ws.append(columns)
-            for row in queryset:
-                ws.append([row.get(col, '') for col in columns])
-            stream = io.BytesIO()
-            wb.save(stream)
-            stream.seek(0)
-            response = HttpResponse(
-                stream,
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = filename_base
+            
+            sheet.append(columns)
+            
+            for data_row in queryset:
+                row_data = []
+                for col in columns:
+                    value = data_row.get(col, '')
+                    row_data.append(value)
+                sheet.append(row_data)
+
+            excel_file = io.BytesIO()
+            workbook.save(excel_file)
+            excel_file.seek(0)
+
+            file_response = HttpResponse(
+                excel_file,
                 content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            response['Content-Disposition'] = f'attachment; filename="{filename_base}.xlsx"'
-            return response
+            file_response['Content-Disposition'] = f'attachment; filename="{filename_base}.xlsx"'
+            return file_response
 
         elif file_type == 'word':
-            doc = Document()
-            doc.add_heading(filename_base, 0)
-            for row in queryset:
-                doc.add_paragraph(' | '.join(str(row.get(col, '')) for col in columns))
-            stream = io.BytesIO()
-            doc.save(stream)
-            stream.seek(0)
-            response = HttpResponse(
-                stream,
+            document = Document()
+            document.add_heading(filename_base, 0)
+
+            for data_row in queryset:
+                row_values = []
+                for col in columns:
+                    value = data_row.get(col, '')
+                    row_values.append(str(value))
+                
+                text_line = ' | '.join(row_values)
+                document.add_paragraph(text_line)
+
+            word_file = io.BytesIO()
+            document.save(word_file)
+            word_file.seek(0)
+
+            file_response = HttpResponse(
+                word_file,
                 content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             )
-            response['Content-Disposition'] = f'attachment; filename="{filename_base}.docx"'
-            return response
+            file_response['Content-Disposition'] = f'attachment; filename="{filename_base}.docx"'
+            return file_response
 
-        return Response({"error": "Unknown file type"}, status=400)
+        else:
+            return Response({"error": "Unknown file type"}, status=400)
 
 
 class GenreViewSet(viewsets.ModelViewSet, BaseExportMixin):
@@ -64,12 +89,13 @@ class GenreViewSet(viewsets.ModelViewSet, BaseExportMixin):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         queryset = self.get_queryset()
-        total_count = queryset.count()
-        top_genre = Genre.objects.annotate(num_books=Count('book')).order_by('-num_books').first()
+        total = queryset.count()
+        
+        top_genre = Genre.objects.annotate(book_count=Count('book')).order_by('-book_count').first()
         top_name = top_genre.name if top_genre else None
 
         return Response({
-            'count': total_count,
+            'count': total,
             'top': top_name
         })
 
@@ -78,14 +104,25 @@ class GenreViewSet(viewsets.ModelViewSet, BaseExportMixin):
         queryset = self.get_queryset()
         
         if request.user.is_superuser:
-            data = [{'ID': g.id, 'Name': g.name, 'User': g.user.username if g.user else ''} for g in queryset]
+            data_list = []
+            for genre in queryset:
+                user_name = genre.user.username if genre.user else ''
+                data_list.append({
+                    'ID': genre.id,
+                    'Name': genre.name,
+                    'User': user_name
+                })
             columns = ['ID', 'Name', 'User']
         else:
-            data = [{'ID': g.id, 'Name': g.name} for g in queryset]
+            data_list = []
+            for genre in queryset:
+                data_list.append({
+                    'ID': genre.id,
+                    'Name': genre.name
+                })
             columns = ['ID', 'Name']
-            
-        return self.export_queryset(data, columns, 'Genres')
-
+        
+        return self.export_queryset(data_list, columns, 'Genres')
 
 class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
     serializer_class = LibrarySerializer
@@ -112,13 +149,13 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         queryset = self.get_queryset()
-        total_count = queryset.count()
-        top_library = Library.objects.annotate(num_loans=Count('book__loan')).order_by('-num_loans').first()
-
+        total = queryset.count()
+        
+        top_library = Library.objects.annotate(loan_count=Count('book__loan')).order_by('-loan_count').first()
         top_name = top_library.name if top_library else None
 
         return Response({
-            'count': total_count,
+            'count': total,
             'top': top_name
         })
 
@@ -127,13 +164,25 @@ class LibraryViewSet(viewsets.ModelViewSet, BaseExportMixin):
         queryset = self.get_queryset()
         
         if request.user.is_superuser:
-            data = [{'ID': l.id, 'Name': l.name, 'User': l.user.username if l.user else ''} for l in queryset]
+            data_list = []
+            for library in queryset:
+                user_name = library.user.username if library.user else ''
+                data_list.append({
+                    'ID': library.id,
+                    'Name': library.name,
+                    'User': user_name
+                })
             columns = ['ID', 'Name', 'User']
         else:
-            data = [{'ID': l.id, 'Name': l.name} for l in queryset]
+            data_list = []
+            for library in queryset:
+                data_list.append({
+                    'ID': library.id,
+                    'Name': library.name
+                })
             columns = ['ID', 'Name']
-            
-        return self.export_queryset(data, columns, 'Libraries')
+        
+        return self.export_queryset(data_list, columns, 'Libraries')
 
 
 class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
@@ -145,31 +194,27 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Статистика по книгам"""
         queryset = self.get_queryset()
-        total_count = queryset.count()
+        total = queryset.count()
 
-        most_borrowed = (
-            Loan.objects.values('book__id', 'book__title')
-            .annotate(borrow_count=Count('book'))
-            .order_by('-borrow_count')
-            .first()
-        )
+        most_borrowed = Loan.objects.values('book__id', 'book__title').annotate(borrow_count=Count('book')).order_by('-borrow_count').first()
 
-        most_borrowed_book = {
-            'id': most_borrowed['book__id'],
-            'title': most_borrowed['book__title'],
-            'borrow_count': most_borrowed['borrow_count']
-        } if most_borrowed else None
+        if most_borrowed:
+            most_borrowed_book = {
+                'id': most_borrowed['book__id'],
+                'title': most_borrowed['book__title'],
+                'borrow_count': most_borrowed['borrow_count']
+            }
+        else:
+            most_borrowed_book = None
 
         return Response({
-            'count': total_count,
+            'count': total,
             'most_borrowed': most_borrowed_book
         })
 
     @action(detail=False, methods=['get'])
     def export(self, request):
-        """Экспорт книг - только для администраторов"""
         if not request.user.is_superuser:
             return Response(
                 {"error": "Only administrators can export books"}, 
@@ -177,33 +222,40 @@ class BookViewSet(viewsets.ModelViewSet, BaseExportMixin):
             )
         
         queryset = self.get_queryset()
-        data = [
-            {
-                'ID': b.id,
-                'Title': b.title,
-                'Genre': b.genre.name if b.genre else '',
-                'Library': b.library.name if b.library else '',
-                'Status': 'Available' if b.is_available else 'Borrowed'
-            }
-            for b in queryset
-        ]
-        return self.export_queryset(data, ['ID', 'Title', 'Genre', 'Library', 'Status'], 'Books')
-
+        data_list = []
+        
+        for book in queryset:
+            genre_name = book.genre.name if book.genre else ''
+            library_name = book.library.name if book.library else ''
+            status_text = 'Available' if book.is_available else 'Borrowed'
+            
+            data_list.append({
+                'ID': book.id,
+                'Title': book.title,
+                'Genre': genre_name,
+                'Library': library_name,
+                'Status': status_text
+            })
+        
+        columns = ['ID', 'Title', 'Genre', 'Library', 'Status']
+        
+        return self.export_queryset(data_list, columns, 'Books')
+    
 
 class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
     serializer_class = LoanSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = Loan.objects.select_related('book', 'member', 'user')
-        if self.request.user.is_superuser:
-            return qs
+        queryset = Loan.objects.select_related('book', 'member', 'user')
         
-        return qs.filter(member__user=self.request.user)
+        if self.request.user.is_superuser:
+            return queryset
+        
+        return queryset.filter(member__user=self.request.user)
 
     @action(detail=True, methods=['post'], url_path='return')
     def return_book(self, request, pk=None):
-        """Возврат книги (установка return_date)"""
         loan = self.get_object()
         
         if loan.return_date:
@@ -211,7 +263,7 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
                 {'detail': 'Книга уже возвращена.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        from datetime import date
+        
         loan.return_date = date.today()
         loan.save()
         
@@ -240,46 +292,53 @@ class LoanViewSet(viewsets.ModelViewSet, BaseExportMixin):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        qs = self.get_queryset()
+        queryset = self.get_queryset()
+        total = queryset.count()
 
-        count = qs.count()
-
-        top_reader = (
-            qs.values('member__id', 'member__first_name')
-            .annotate(loan_count=Count('id'))
-            .order_by('-loan_count')
-            .first()
-        )
+        top_reader = queryset.values('member__id', 'member__first_name').annotate(loan_count=Count('id')).order_by('-loan_count').first()
         
-        top_reader_data = {
-            'name': top_reader['member__first_name'] if top_reader else None,
-            'loan_count': top_reader['loan_count'] if top_reader else 0
-        }
+        if top_reader:
+            top_reader_data = {
+                'name': top_reader['member__first_name'],
+                'loan_count': top_reader['loan_count']
+            }
+        else:
+            top_reader_data = {
+                'name': None,
+                'loan_count': 0
+            }
 
         return Response({
-            'count': count,
+            'count': total,
             'topReader': top_reader_data
         })
 
     @action(detail=False, methods=['get'])
     def export(self, request):
-        """Экспорт выдач (только админ)"""
         if not request.user.is_superuser:
             return Response({"error": "Permission denied"}, status=403)
 
         queryset = self.get_queryset()
-        data = [
-            {
-                'ID': l.id,
-                'Book': l.book.title if l.book else '',
-                'Member': l.member.first_name if l.member else '',
-                'User': l.user.username if l.user else '',
-                'Loan Date': l.loan_date,
-                'Return Date': l.return_date if l.return_date else 'Not returned'
-            }
-            for l in queryset
-        ]
-        return self.export_queryset(data, ['ID', 'Book', 'Member', 'User', 'Loan Date', 'Return Date'], 'Loans')
+        data_list = []
+        
+        for loan in queryset:
+            book_title = loan.book.title if loan.book else ''
+            member_name = loan.member.first_name if loan.member else ''
+            user_name = loan.user.username if loan.user else ''
+            return_date = loan.return_date if loan.return_date else 'Not returned'
+            
+            data_list.append({
+                'ID': loan.id,
+                'Book': book_title,
+                'Member': member_name,
+                'User': user_name,
+                'Loan Date': loan.loan_date,
+                'Return Date': return_date
+            })
+        
+        columns = ['ID', 'Book', 'Member', 'User', 'Loan Date', 'Return Date']
+        
+        return self.export_queryset(data_list, columns, 'Loans')
 
 
 class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
@@ -325,7 +384,10 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         user.save()
         
         if age:
-            profile, created = UserProfile.objects.get_or_create(user=user)
+            try:
+                profile = UserProfile.objects.get(user=user)
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(user=user)
             profile.age = int(age)
             profile.save()
 
@@ -361,7 +423,10 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         if 'age' in request.data:
             age = request.data['age']
             if age:
-                profile, created = UserProfile.objects.get_or_create(user=instance)
+                try:
+                    profile = UserProfile.objects.get(user=instance)
+                except UserProfile.DoesNotExist:
+                    profile = UserProfile.objects.create(user=instance)
                 profile.age = int(age)
                 profile.save()
 
@@ -371,31 +436,47 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         queryset_users = self.get_queryset().filter(is_superuser=False)
-        total_count_users = queryset_users.count()
+        total_users = queryset_users.count()
 
         queryset_admins = self.get_queryset().filter(is_superuser=True)
-        total_count_admins = queryset_admins.count()
+        total_admins = queryset_admins.count()
 
         user_profiles = UserProfile.objects.filter(user__in=queryset_users, age__isnull=False)
         if user_profiles.exists():
-            user_ages = [p.age for p in user_profiles if p.age]
-            avg_age_users = round(sum(user_ages) / len(user_ages), 1)
+            age_list = []
+            for profile in user_profiles:
+                if profile.age:
+                    age_list.append(profile.age)
+            if age_list:
+                avg_age_users = round(sum(age_list) / len(age_list), 1)
+            else:
+                avg_age_users = 0
         else:
             avg_age_users = 0
 
         admin_profiles = UserProfile.objects.filter(user__in=queryset_admins, age__isnull=False)
         if admin_profiles.exists():
-            admin_ages = [p.age for p in admin_profiles if p.age]
-            avg_age_admins = round(sum(admin_ages) / len(admin_ages), 1)
+            admin_age_list = []
+            for profile in admin_profiles:
+                if profile.age:
+                    admin_age_list.append(profile.age)
+            if admin_age_list:
+                avg_age_admins = round(sum(admin_age_list) / len(admin_age_list), 1)
+            else:
+                avg_age_admins = 0
         else:
             avg_age_admins = 0
 
-        loans_count = Loan.objects.filter(member__user__in=queryset_users).count()
-        avg_books = round(loans_count / total_count_users, 1) if total_count_users else 0
+        loans_total = Loan.objects.filter(member__user__in=queryset_users).count()
+        
+        if total_users > 0:
+            avg_books = round(loans_total / total_users, 1)
+        else:
+            avg_books = 0
 
         return Response({
-            'count_users': total_count_users,
-            'count_admins': total_count_admins,
+            'count_users': total_users,
+            'count_admins': total_admins,
             'avg_age_users': avg_age_users,
             'avg_age_admins': avg_age_admins,
             'avg_books': avg_books
@@ -405,37 +486,42 @@ class MemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
     def export_excel(self, request):
         queryset = self.get_queryset()
         
-        data = [
-            {
-                'ID': u.id,
-                'Username': u.username,
-                'Email': u.email,
-                'Is Superuser': 'Yes' if u.is_superuser else 'No',
-                'Is Staff': 'Yes' if u.is_staff else 'No'
-            }
-            for u in queryset
-        ]
-        return self.export_queryset(data, ['ID', 'Username', 'Email', 'Is Superuser', 'Is Staff'], 'Members')
+        data_list = []
+        for user in queryset:
+            data_list.append({
+                'ID': user.id,
+                'Username': user.username,
+                'Email': user.email,
+                'Is Superuser': 'Yes' if user.is_superuser else 'No',
+                'Is Staff': 'Yes' if user.is_staff else 'No'
+            })
+        
+        columns = ['ID', 'Username', 'Email', 'Is Superuser', 'Is Staff']
+        
+        return self.export_queryset(data_list, columns, 'Members')
 
     @action(detail=False, methods=['get'], url_path='export/word')
     def export_word(self, request):
         queryset = self.get_queryset()
         
-        data = [
-            {
-                'ID': u.id,
-                'Username': u.username,
-                'Email': u.email,
-                'Is Superuser': 'Yes' if u.is_superuser else 'No',
-                'Is Staff': 'Yes' if u.is_staff else 'No'
-            }
-            for u in queryset
-        ]
+        data_list = []
+        for user in queryset:
+            data_list.append({
+                'ID': user.id,
+                'Username': user.username,
+                'Email': user.email,
+                'Is Superuser': 'Yes' if user.is_superuser else 'No',
+                'Is Staff': 'Yes' if user.is_staff else 'No'
+            })
+        
+        columns = ['ID', 'Username', 'Email', 'Is Superuser', 'Is Staff']
+        
         from django.http import QueryDict
-        query_dict = request.GET.copy()
-        query_dict['type'] = 'word'
-        request.GET = query_dict
-        return self.export_queryset(data, ['ID', 'Username', 'Email', 'Is Superuser', 'Is Staff'], 'Members')
+        request_copy = request._request.GET.copy()
+        request_copy['type'] = 'word'
+        request._request.GET = request_copy
+        
+        return self.export_queryset(data_list, columns, 'Members')
 
 
 class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
@@ -451,7 +537,6 @@ class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         user_member = queryset.filter(user=self.request.user).first()
         
         if not user_member:
-            from library.models import Library
             default_library = Library.objects.first()
             
             if default_library:
@@ -483,25 +568,27 @@ class LibraryMemberViewSet(viewsets.ModelViewSet, BaseExportMixin):
         queryset = self.get_queryset()
         
         if not request.user.is_superuser:
-            data = [
-                {
-                    'ID': m.id,
-                    'Library': m.library.name if m.library else '',
+            data_list = []
+            for member in queryset:
+                library_name = member.library.name if member.library else ''
+                data_list.append({
+                    'ID': member.id,
+                    'Library': library_name,
                     'User': '*****'
-                }
-                for m in queryset
-            ]
+                })
             columns = ['ID', 'Library', 'User']
         else:
-            data = [
-                {
-                    'ID': m.id,
-                    'Name': m.first_name,
-                    'Library': m.library.name if m.library else '',
-                    'User': m.user.username if m.user else ''
-                }
-                for m in queryset
-            ]
+            data_list = []
+            for member in queryset:
+                member_name = member.first_name
+                library_name = member.library.name if member.library else ''
+                user_name = member.user.username if member.user else ''
+                data_list.append({
+                    'ID': member.id,
+                    'Name': member_name,
+                    'Library': library_name,
+                    'User': user_name
+                })
             columns = ['ID', 'Name', 'Library', 'User']
         
-        return self.export_queryset(data, columns, 'LibraryMembers')
+        return self.export_queryset(data_list, columns, 'LibraryMembers')
