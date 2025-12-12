@@ -6,19 +6,19 @@ import { useUserStore } from '../stores/userStore'
 const router = useRouter()
 const userStore = useUserStore()
 
-
-onMounted(() => {
+onMounted(async () => {
+  await userStore.fetchUserInfo()
   if (!userStore.isAuthenticated) {
     router.push('/login')
   }
 })
-
 
 async function handleLogout() {
   await userStore.logout()
   router.push('/login')
 }
 </script>
+
 
 <template>
   <v-container class="profile-container">

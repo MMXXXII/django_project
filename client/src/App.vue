@@ -12,7 +12,8 @@ const handleLogout = async () => {
 }
 
 onMounted(() => {
-  userStore.initializeFromStorage()
+  userStore.initializePending()
+  userStore.fetchUserInfo()
 })
 </script>
 

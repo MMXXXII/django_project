@@ -1,5 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.dispatch import receiver
+from django.db.models.signals import post_save
+import pyotp
+
 
 # Create your models here.
 class Genre(models.Model):
@@ -73,13 +77,24 @@ class Loan(models.Model):
 
 
 class UserProfile(models.Model):
-
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     age = models.IntegerField(null=True, blank=True, verbose_name='Возраст')
+    totp_key = models.CharField(max_length=128, null=True, blank=True, default=pyotp.random_hex)
     
     class Meta:
         verbose_name = 'Профиль пользователя'
         verbose_name_plural = 'Профили пользователей'
-    
+
     def __str__(self):
         return f'Профиль {self.user.username}'
+
+    def save(self, *args, **kwargs):
+        if self.id is None: 
+            self.totp_key = pyotp.random_base32()
+        super().save(*args, **kwargs)
+
+
+    @receiver(post_save, sender=User)
+    def create_user_profile(sender, instance, created, **kwargs):
+        if created:
+            UserProfile.objects.create(user=instance)

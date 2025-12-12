@@ -2,9 +2,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { showNotification, handleApiError } from '../utils'
+import { useUserStore } from '../stores/userStore'
 
-const user = ref(null)
-const isAdmin = computed(() => !!user.value?.is_superuser)
+
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isSuperUser)
 const books = ref([])
 const genres = ref([])
 const libraries = ref([])
@@ -14,12 +16,14 @@ const searchQuery = ref('')
 
 const sortBy = ref([{ key: 'title', order: 'asc' }])
 
+
 const dialogs = reactive({
   add: false, edit: false, delete: false
 })
 const form = reactive({
   id: null, title: '', genre: '', library: ''
 })
+
 
 const headers = [
   { title: 'Название', key: 'title', sortable: true },
@@ -39,28 +43,29 @@ const filteredBooks = computed(() => {
 
 
 async function loadData() {
-    const [userRes, booksRes, statsRes, genresRes, libsRes] = await Promise.all([
-      axios.get('/userprofile/info/'),
-      axios.get('/books/'),
-      axios.get('/books/stats/'),
-      axios.get('/genres/'),
-      axios.get('/libraries/')
-    ])
-    user.value = userRes.data
-    books.value = booksRes.data.map(b => ({
-      ...b,
-      genre_name: b.genre_name || (b.genre?.name || ''),
-      library_name: b.library_name || (b.library?.name || ''),
-      status: b.is_available ? 'Доступна' : 'Выдана'
-    }))
-    bookStats.value = statsRes.data
-    genres.value = genresRes.data
-    libraries.value = libsRes.data
+  const [booksRes, statsRes, genresRes, libsRes] = await Promise.all([
+    axios.get('/books/'),
+    axios.get('/books/stats/'),
+    axios.get('/genres/'),
+    axios.get('/libraries/')
+  ])
+  books.value = booksRes.data.map(b => ({
+    ...b,
+    genre_name: b.genre_name || (b.genre?.name || ''),
+    library_name: b.library_name || (b.library?.name || ''),
+    status: b.is_available ? 'Доступна' : 'Выдана'
+  }))
+  bookStats.value = statsRes.data
+  genres.value = genresRes.data
+  libraries.value = libsRes.data
 }
 
 
 function resetForm() {
-  Object.assign(form, { id: null, title: '', genre: '', library: '' })
+  form.id = null
+  form.title = ''
+  form.genre = ''
+  form.library = ''
 }
 
 
@@ -68,11 +73,10 @@ function openEdit(book) {
   if (!isAdmin.value) {
     return
   }
-  Object.assign(form, {
-    id: book.id, title: book.title || '',
-    genre: book.genre?.id || book.genre || '',
-    library: book.library?.id || book.library || ''
-  })
+  form.id = book.id
+  form.title = book.title || ''
+  form.genre = book.genre?.id || book.genre || ''
+  form.library = book.library?.id || book.library || ''
   dialogs.edit = true
 }
 
@@ -81,7 +85,8 @@ function openDelete(book) {
   if (!isAdmin.value) {
     return
   }
-  Object.assign(form, { id: book.id, title: book.title || '' })
+  form.id = book.id
+  form.title = book.title || ''
   dialogs.delete = true
 }
 
@@ -91,13 +96,13 @@ async function saveForm() {
     showNotification({ visible: true, message: 'Заполните все поля', type: 'warning' })
     return
   }
-    const url = form.id ? `/books/${form.id}/` : '/books/'
-    const method = form.id ? axios.put : axios.post
-    await method(url, { title: form.title, genre: form.genre, library: form.library })
-    dialogs[form.id ? 'edit' : 'add'] = false
-    resetForm()
-    await loadData()
-    showNotification({ visible: true, message: form.id ? 'Сохранено' : 'Добавлено', type: 'success' })
+  const url = form.id ? `/books/${form.id}/` : '/books/'
+  const method = form.id ? axios.put : axios.post
+  await method(url, { title: form.title, genre: form.genre, library: form.library })
+  dialogs[form.id ? 'edit' : 'add'] = false
+  resetForm()
+  await loadData()
+  showNotification({ visible: true, message: form.id ? 'Сохранено' : 'Добавлено', type: 'success' })
 }
 
 
@@ -105,12 +110,11 @@ async function deleteBook() {
   if (!isAdmin.value) {
     return
   }
-
-    await axios.delete(`/books/${form.id}/`)
-    dialogs.delete = false
-    resetForm()
-    await loadData()
-    showNotification({ visible: true, message: 'Удалено', type: 'danger' })
+  await axios.delete(`/books/${form.id}/`)
+  dialogs.delete = false
+  resetForm()
+  await loadData()
+  showNotification({ visible: true, message: 'Удалено', type: 'danger' })
 }
 
 
@@ -118,21 +122,24 @@ async function exportFile(type) {
   if (!isAdmin.value) {
     return
   }
-    const res = await axios.get('/books/export/', {
-      params: { type }, responseType: 'blob'
-    })
-    const url = URL.createObjectURL(new Blob([res.data]))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Books.${type === 'excel' ? 'xlsx' : 'docx'}`
-    a.click()
-    URL.revokeObjectURL(url)
-
+  const res = await axios.get('/books/export/', {
+    params: { type }, responseType: 'blob'
+  })
+  const url = URL.createObjectURL(new Blob([res.data]))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `Books.${type === 'excel' ? 'xlsx' : 'docx'}`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 
-onMounted(loadData)
+onMounted(async () => {
+  await userStore.fetchUserInfo()
+  await loadData()
+})
 </script>
+
 
 <template>
   <v-container fluid>

@@ -2,43 +2,43 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { showNotification, handleApiError } from '../utils'
+import { useUserStore } from '../stores/userStore'
 
+
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isSuperUser)
 const libraries = ref([])
 const filteredLibraries = ref([])
 const libraryStats = ref(null)
-const user = ref(null)
+
 
 const searchQuery = ref('')
 const sortOrder = ref('asc')
-const isAdmin = computed(() => !!user.value?.is_superuser)
+
 
 const notification = reactive({ visible: false, message: '', type: 'success' })
+
 
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showAddDialog = ref(false)
+
 
 const libraryToAdd = reactive({ name: '' })
 const libraryToEdit = reactive({ id: null, name: '' })
 const libraryToDelete = reactive({ id: null, name: '' })
 
 
-async function loadUser() {
-    const res = await axios.get('/userprofile/info/')
-    user.value = res.data
-}
-
-
 async function loadLibraries() {
-    const res = await axios.get('/libraries/')
-    libraries.value = res.data
-    filterAndSort()
+  const res = await axios.get('/libraries/')
+  libraries.value = res.data
+  filterAndSort()
 }
 
 
 async function loadLibraryStats() {
-    const res = await axios.get('/libraries/stats/')
-    libraryStats.value = res.data
+  const res = await axios.get('/libraries/stats/')
+  libraryStats.value = res.data
 }
 
 
@@ -71,12 +71,12 @@ async function addLibrary() {
     return
   }
 
-    await axios.post('/libraries/', { name })
-    libraryToAdd.name = ''
-    await loadLibraries()
-    await loadLibraryStats()
-    showNotification({ visible: true, message: 'Библиотека добавлена', type: 'success' })
-    showAddDialog.value = false
+  await axios.post('/libraries/', { name })
+  libraryToAdd.name = ''
+  await loadLibraries()
+  await loadLibraryStats()
+  showNotification({ visible: true, message: 'Библиотека добавлена', type: 'success' })
+  showAddDialog.value = false
 }
 
 
@@ -98,11 +98,11 @@ async function updateLibrary() {
     return
   }
 
-    await axios.put(`/libraries/${libraryToEdit.id}/`, { name })
-    showEditDialog.value = false
-    await loadLibraries()
-    await loadLibraryStats()
-    showNotification({ visible: true, message: 'Изменения сохранены', type: 'success' })
+  await axios.put(`/libraries/${libraryToEdit.id}/`, { name })
+  showEditDialog.value = false
+  await loadLibraries()
+  await loadLibraryStats()
+  showNotification({ visible: true, message: 'Изменения сохранены', type: 'success' })
 }
 
 
@@ -119,11 +119,11 @@ async function deleteLibrary() {
     return
   }
 
-    await axios.delete(`/libraries/${libraryToDelete.id}/`)
-    showDeleteDialog.value = false
-    await loadLibraries()
-    await loadLibraryStats()
-    showNotification({ visible: true, message: 'Библиотека удалена', type: 'danger' })
+  await axios.delete(`/libraries/${libraryToDelete.id}/`)
+  showDeleteDialog.value = false
+  await loadLibraries()
+  await loadLibraryStats()
+  showNotification({ visible: true, message: 'Библиотека удалена', type: 'danger' })
 }
 
 
@@ -132,24 +132,25 @@ async function exportLibraries(type = 'excel') {
     return
   }
 
-    const res = await axios.get('/libraries/export/', { params: { type }, responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = type === 'excel' ? 'libraries.xlsx' : 'libraries.docx'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    showNotification({ visible: true, message: 'Файл скачивается', type: 'success' })
+  const res = await axios.get('/libraries/export/', { params: { type }, responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([res.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = type === 'excel' ? 'libraries.xlsx' : 'libraries.docx'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  showNotification({ visible: true, message: 'Файл скачивается', type: 'success' })
 }
 
 
 onMounted(async () => {
-  await loadUser()
+  await userStore.fetchUserInfo()
   await loadLibraries()
   await loadLibraryStats()
 })
 </script>
+
 
 <template>
   <v-container fluid>

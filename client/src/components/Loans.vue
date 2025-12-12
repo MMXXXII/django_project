@@ -1,32 +1,40 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { useUserStore } from '../stores/userStore'
 
+
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isSuperUser)
 const loans = ref([])
 const filteredLoans = ref([])
 const loanStats = ref(null)
-const user = ref(null)
 const books = ref([])
 const libraries = ref([])
 const members = ref([])
 const currentMember = ref(null)
 
+
 const page = ref(1)
 const itemsPerPage = ref(20)
 
+
 const searchQuery = ref('')
 const sortOrder = ref('asc')
-const isAdmin = computed(() => !!user.value?.is_superuser)
+
 
 const notification = reactive({ visible: false, message: '', type: 'success' })
+
 
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 
+
 const loanToAdd = reactive({ library: null, book: null, member: null, loan_date: '' })
 const loanToEdit = reactive({ id: null, library: null, book: null, member: null, loan_date: '' })
 const loanToDelete = reactive({ id: null, bookTitle: '', memberName: '' })
+
 
 function applyFilter() {
   const q = searchQuery.value.trim().toLowerCase()
@@ -55,6 +63,7 @@ function applyFilter() {
   page.value = 1
 }
 
+
 function getMemberName(id) {
   const mem = members.value.find(m => m.id === id);
   if (!mem) {
@@ -62,6 +71,7 @@ function getMemberName(id) {
   }
   return mem.first_name || mem.username || 'Неизвестно';
 }
+
 
 function getLibraryName(bookId) {
   const book = books.value.find(b => b.id === bookId);
@@ -72,10 +82,12 @@ function getLibraryName(bookId) {
   return lib ? lib.name : '';
 }
 
+
 function getBookTitle(bookId) {
   const book = books.value.find(b => b.id === bookId);
   return book ? book.title : '';
 }
+
 
 function availableBooksToAdd() {
   const library = loanToAdd.library;
@@ -85,6 +97,7 @@ function availableBooksToAdd() {
   return books.value.filter(b => b.is_available && b.library === library);
 }
 
+
 function availableBooksToEdit() {
   const library = loanToEdit.library;
   if (!library) {
@@ -93,57 +106,60 @@ function availableBooksToEdit() {
   return books.value.filter(b => b.is_available && b.library === library);
 }
 
+
 function onLibraryChange() {
   loanToAdd.book = null;
 }
+
 
 function onEditLibraryChange() {
   loanToEdit.book = null;
 }
 
-async function loadUser() {
-    const r = await axios.get('/userprofile/info/')
-    user.value = r.data
-}
 
 async function loadCurrentMember() {
-    const r = await axios.get('/library-members/')
-    if (r.data && r.data.length) {
-      if (isAdmin.value) {
-        members.value = r.data
-      } else {
-        currentMember.value = r.data[0]
-        members.value = r.data
-      }
+  const r = await axios.get('/library-members/')
+  if (r.data && r.data.length) {
+    if (isAdmin.value) {
+      members.value = r.data
+    } else {
+      currentMember.value = r.data[0]
+      members.value = r.data
     }
+  }
 }
+
 
 async function loadLibraries() {
-    const r = await axios.get('/libraries/')
-    libraries.value = r.data
+  const r = await axios.get('/libraries/')
+  libraries.value = r.data
 }
+
 
 async function loadBooks() {
-    const r = await axios.get('/books/')
-    books.value = r.data
+  const r = await axios.get('/books/')
+  books.value = r.data
 }
+
 
 async function loadLoans() {
-    const r = await axios.get('/loans/');
-    
-    if (!isAdmin.value && currentMember.value) {
-        loans.value = r.data.filter(loan => loan.member === currentMember.value.id);
-    } else {
-        loans.value = r.data;
-    }
-    
-    applyFilter();
+  const r = await axios.get('/loans/');
+  
+  if (!isAdmin.value && currentMember.value) {
+    loans.value = r.data.filter(loan => loan.member === currentMember.value.id);
+  } else {
+    loans.value = r.data;
+  }
+  
+  applyFilter();
 }
 
+
 async function loadLoanStats() {
-    const r = await axios.get('/loans/stats/')
-    loanStats.value = r.data
+  const r = await axios.get('/loans/stats/')
+  loanStats.value = r.data
 }
+
 
 async function addLoan() {
   if (!loanToAdd.book || !loanToAdd.loan_date) {
@@ -156,21 +172,22 @@ async function addLoan() {
     return
   }
 
-    await axios.post('/loans/', {
-      book: loanToAdd.book,
-      member: memberId,
-      loan_date: loanToAdd.loan_date
-    })
-    
-    loanToAdd.library = null
-    loanToAdd.book = null
-    loanToAdd.member = null
-    loanToAdd.loan_date = ''
-    
-    showAddDialog.value = false
-    
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()])
+  await axios.post('/loans/', {
+    book: loanToAdd.book,
+    member: memberId,
+    loan_date: loanToAdd.loan_date
+  })
+  
+  loanToAdd.library = null
+  loanToAdd.book = null
+  loanToAdd.member = null
+  loanToAdd.loan_date = ''
+  
+  showAddDialog.value = false
+  
+  await Promise.all([loadBooks(), loadLoans(), loadLoanStats()])
 }
+
 
 function openEditDialog(loan) {
   if (!isAdmin.value) {
@@ -193,15 +210,16 @@ async function updateLoan() {
   if (!isAdmin.value || !loanToEdit.id) {
     return;
   }
-    const data = {
-      book: loanToEdit.book,
-      member: loanToEdit.member,
-      loan_date: loanToEdit.loan_date
-    };
-    await axios.put(`/loans/${loanToEdit.id}/`, data);
-    showEditDialog.value = false;
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
+  const data = {
+    book: loanToEdit.book,
+    member: loanToEdit.member,
+    loan_date: loanToEdit.loan_date
+  };
+  await axios.put(`/loans/${loanToEdit.id}/`, data);
+  showEditDialog.value = false;
+  await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
 }
+
 
 function openDeleteDialog(loan) {
   if (!isAdmin.value) {
@@ -214,39 +232,43 @@ function openDeleteDialog(loan) {
   showDeleteDialog.value = true;
 }
 
+
 async function deleteLoan() {
   if (!isAdmin.value || !loanToDelete.id) {
     return;
   }
-    await axios.delete(`/loans/${loanToDelete.id}/`);
-    showDeleteDialog.value = false;
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
+  await axios.delete(`/loans/${loanToDelete.id}/`);
+  showDeleteDialog.value = false;
+  await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
 }
+
 
 async function returnBook(loan) {
-    await axios.post(`/loans/${loan.id}/return/`);
-    await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
+  await axios.post(`/loans/${loan.id}/return/`);
+  await Promise.all([loadBooks(), loadLoans(), loadLoanStats()]);
 
 }
+
 
 async function exportLoans(type = 'excel') {
   if (!isAdmin.value) {
     return;
   }
 
-    const res = await axios.get('/loans/export/', { 
-      params: { type }, 
-      responseType: 'blob' 
-    });
-    const url = window.URL.createObjectURL(new Blob([res.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = type === 'excel' ? 'loans.xlsx' : 'loans.docx';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+  const res = await axios.get('/loans/export/', { 
+    params: { type }, 
+    responseType: 'blob' 
+  });
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = type === 'excel' ? 'loans.xlsx' : 'loans.docx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
+
 
 const paginatedLoans = computed(() => {
   const start = (page.value - 1) * itemsPerPage.value;
@@ -254,13 +276,14 @@ const paginatedLoans = computed(() => {
   return filteredLoans.value.slice(start, end);
 });
 
+
 const totalPages = computed(() => {
   return Math.ceil(filteredLoans.value.length / itemsPerPage.value);
 });
 
 
 onMounted(async () => {
-  await loadUser()
+  await userStore.fetchUserInfo()
   await Promise.all([loadLibraries(), loadBooks(), loadCurrentMember()])
   await loadLoans()
   await loadLoanStats()

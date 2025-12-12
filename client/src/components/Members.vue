@@ -3,13 +3,12 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useUserStore } from '../stores/userStore'
 
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isSuperUser)
+
 const members = ref([])
 const filteredMembers = ref([])
 const memberStats = ref(null)
-const userStore = useUserStore()
-
-const isAdmin = computed(() => userStore.isSuperUser)
-
 
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
@@ -34,7 +33,6 @@ const memberToAdd = reactive({
   is_staff: false,
 })
 
-
 const memberToEdit = reactive({
   id: null,
   username: '',
@@ -45,28 +43,21 @@ const memberToEdit = reactive({
   is_staff: false,
 })
 
-
 const memberToDelete = reactive({
   id: null,
   username: '',
 })
 
-
 async function loadMembers() {
-    const r = await axios.get('/members/')
-    members.value = r.data
-    filteredMembers.value = members.value.slice()
+  const r = await axios.get('/members/')
+  members.value = r.data
+  filteredMembers.value = members.value.slice()
 }
-
 
 async function loadMemberStats() {
-    const r = await axios.get('/members/stats/', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` },
-    });
-    memberStats.value = r.data;
-
+  const r = await axios.get('/members/stats/')
+  memberStats.value = r.data;
 }
-
 
 async function addMember() {
   if (!isAdmin.value) {
@@ -76,19 +67,17 @@ async function addMember() {
   if (!memberToAdd.username || !memberToAdd.email || !memberToAdd.password) {
     return;
   }
-    await axios.post('/members/', memberToAdd);
-    memberToAdd.username = '';
-    memberToAdd.email = '';
-    memberToAdd.password = '';
-    memberToAdd.age = null;
-    memberToAdd.is_superuser = false;
-    memberToAdd.is_staff = false;
-    showAddDialog.value = false;
-    await loadMembers();
-    await loadMemberStats();
-
+  await axios.post('/members/', memberToAdd);
+  memberToAdd.username = '';
+  memberToAdd.email = '';
+  memberToAdd.password = '';
+  memberToAdd.age = null;
+  memberToAdd.is_superuser = false;
+  memberToAdd.is_staff = false;
+  showAddDialog.value = false;
+  await loadMembers();
+  await loadMemberStats();
 }
-
 
 function openEditDialog(member) {
   if (!isAdmin.value) {
@@ -105,25 +94,21 @@ function openEditDialog(member) {
   showEditDialog.value = true;
 }
 
-
 async function updateMember() {
   if (!isAdmin.value || !memberToEdit.id) {
     return;
   }
-    await axios.put(`/members/${memberToEdit.id}/`, memberToEdit);
+  await axios.put(`/members/${memberToEdit.id}/`, memberToEdit);
 
-    if (!memberToEdit.is_superuser && userStore.isSuperUser) {
-      userStore.isSuperUser = false;
-      localStorage.setItem('is_superuser', 'false');
-      window.location.href = '/no-access';
-      return;
-    }
+  if (!memberToEdit.is_superuser && userStore.isSuperUser) {
+    await userStore.fetchUserInfo()
+    return;
+  }
 
-    showEditDialog.value = false;
-    await loadMembers();
-    await loadMemberStats();
+  showEditDialog.value = false;
+  await loadMembers();
+  await loadMemberStats();
 }
-
 
 function openDeleteDialog(member) {
   if (!isAdmin.value) {
@@ -134,18 +119,15 @@ function openDeleteDialog(member) {
   showDeleteDialog.value = true;
 }
 
-
 async function deleteMember() {
   if (!isAdmin.value || !memberToDelete.id) {
     return;
   }
-    await axios.delete(`/members/${memberToDelete.id}/`);
-    showDeleteDialog.value = false;
-    await loadMembers();
-    await loadMemberStats();
-
+  await axios.delete(`/members/${memberToDelete.id}/`);
+  showDeleteDialog.value = false;
+  await loadMembers();
+  await loadMemberStats();
 }
-
 
 async function exportMembers(type = 'excel') {
   if (!isAdmin.value) {
@@ -156,26 +138,26 @@ async function exportMembers(type = 'excel') {
   const fileExtension = fileType === 'excel' ? 'xlsx' : 'docx';
   const urlPath = `/members/export/${fileType}/`;
 
-    const response = await axios.get(urlPath, { responseType: 'blob' });
+  const response = await axios.get(urlPath, { responseType: 'blob' });
 
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `members.${fileExtension}`);
-    
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-    
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `members.${fileExtension}`);
+  
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
-
 onMounted(async () => {
+  await userStore.fetchUserInfo()
   await loadMembers()
   await loadMemberStats()
 })
 </script>
+
 
 <template>
   <v-container fluid>

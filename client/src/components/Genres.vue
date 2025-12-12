@@ -2,16 +2,20 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { showNotification, handleApiError } from '../utils'
+import { useUserStore } from '../stores/userStore'
 
-const user = ref(null)
-const isAdmin = computed(() => !!user.value?.is_superuser)
+
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isSuperUser)
 const genres = ref([])
 const genreStats = ref(null)
 const searchQuery = ref('')
 const sortOrder = ref('asc')
 
+
 const dialogs = reactive({ add: false, edit: false, delete: false })
 const form = reactive({ id: null, name: '' })
+
 
 const filteredGenres = computed(() => {
   let list = genres.value;
@@ -30,19 +34,18 @@ const filteredGenres = computed(() => {
 
 
 async function loadData() {
-    const [userRes, genresRes, statsRes] = await Promise.all([
-      axios.get('/userprofile/info/'),
-      axios.get('/genres/'),
-      axios.get('/genres/stats/')
-    ])
-    user.value = userRes.data
-    genres.value = genresRes.data
-    genreStats.value = statsRes.data
+  const [genresRes, statsRes] = await Promise.all([
+    axios.get('/genres/'),
+    axios.get('/genres/stats/')
+  ])
+  genres.value = genresRes.data
+  genreStats.value = statsRes.data
 }
 
 
 function resetForm() {
-  Object.assign(form, { id: null, name: '' })
+  form.id = null
+  form.name = ''
 }
 
 
@@ -50,7 +53,8 @@ function openEdit(genre) {
   if (!isAdmin.value) {
     return;
   }
-  Object.assign(form, { id: genre.id, name: genre.name || '' })
+  form.id = genre.id
+  form.name = genre.name || ''
   dialogs.edit = true
 }
 
@@ -59,7 +63,8 @@ function openDelete(genre) {
   if (!isAdmin.value) {
     return;
   }
-  Object.assign(form, { id: genre.id, name: genre.name || '' })
+  form.id = genre.id
+  form.name = genre.name || ''
   dialogs.delete = true
 }
 
@@ -80,29 +85,29 @@ async function saveForm() {
     return
   }
 
-    let url = '/genres/'
-    let method = axios.post
+  let url = '/genres/'
+  let method = axios.post
 
-    if (form.id) {
-      url = `/genres/${form.id}/`
-      method = axios.put
-    }
+  if (form.id) {
+    url = `/genres/${form.id}/`
+    method = axios.put
+  }
 
-    await method(url, { name })
+  await method(url, { name })
 
-    dialogs.edit = false
-    dialogs.add = false
-    resetForm()
-    await loadData()
+  dialogs.edit = false
+  dialogs.add = false
+  resetForm()
+  await loadData()
 
-    let message
-    if (form.id) {
-      message = 'Сохранено'
-    } else {
-      message = 'Добавлено'
-    }
+  let message
+  if (form.id) {
+    message = 'Сохранено'
+  } else {
+    message = 'Добавлено'
+  }
 
-    showNotification({ visible: true, message: message, type: 'success' })
+  showNotification({ visible: true, message: message, type: 'success' })
 }
 
 
@@ -111,11 +116,11 @@ async function deleteGenre() {
     return
   }
 
-    await axios.delete(`/genres/${form.id}/`)
-    dialogs.delete = false
-    resetForm()
-    await loadData()
-    showNotification({ visible: true, message: 'Удалено', type: 'danger' })
+  await axios.delete(`/genres/${form.id}/`)
+  dialogs.delete = false
+  resetForm()
+  await loadData()
+  showNotification({ visible: true, message: 'Удалено', type: 'danger' })
 }
 
 
@@ -124,20 +129,25 @@ async function exportFile(type) {
     return
   }
 
-    const res = await axios.get('/genres/export/', { 
-      params: { type }, 
-      responseType: 'blob' 
-    })
-    const url = URL.createObjectURL(new Blob([res.data]))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `genres.${type === 'excel' ? 'xlsx' : 'docx'}`
-    a.click()
-    URL.revokeObjectURL(url)
+  const res = await axios.get('/genres/export/', { 
+    params: { type }, 
+    responseType: 'blob' 
+  })
+  const url = URL.createObjectURL(new Blob([res.data]))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `genres.${type === 'excel' ? 'xlsx' : 'docx'}`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-onMounted(loadData)
+
+onMounted(async () => {
+  await userStore.fetchUserInfo()
+  await loadData()
+})
 </script>
+
 
 <template>
   <v-container fluid>

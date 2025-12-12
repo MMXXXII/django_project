@@ -21,9 +21,8 @@ const formattedOtpTime = computed(() => {
   return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
 });
 
-
 function startOtpTimer() {
-  otpTimer.value = 300;
+  otpTimer.value = 30;
   timerInterval = setInterval(function() {
     otpTimer.value--;
 
@@ -37,7 +36,6 @@ function startOtpTimer() {
   }, 1000);
 }
 
-
 function stopOtpTimer() {
   if (timerInterval) {
     clearInterval(timerInterval)
@@ -45,30 +43,27 @@ function stopOtpTimer() {
   }
 }
 
-
 async function handleLogin() {
-    const result = await userStore.login(username.value, password.value)
-    userEmail.value = result.email
-    showOtpInput.value = true
-    userStore.error = null
-    stopOtpTimer()
-    startOtpTimer()
+  const result = await userStore.login(username.value, password.value)
+  userEmail.value = result.email
+  showOtpInput.value = true
+  userStore.error = null
+  stopOtpTimer()
+  startOtpTimer()
 }
-
 
 async function handleOtpSubmit() {
-    const success = await userStore.verifyOtp(otpCode.value)
-    if (success) {
-      stopOtpTimer()
-      username.value = ''
-      password.value = ''
-      otpCode.value = ''
-      showOtpInput.value = false
-      router.push('/books')
-      window.location.reload()
-    }
+  const success = await userStore.verifyOtp(otpCode.value)
+  if (success) {
+    stopOtpTimer()
+    username.value = ''
+    password.value = ''
+    otpCode.value = ''
+    showOtpInput.value = false
+    router.push('/books')
+    window.location.reload()
+  }
 }
-
 
 function handleBack() {
   stopOtpTimer()
@@ -79,19 +74,19 @@ function handleBack() {
   userStore.error = null
 }
 
-
 onMounted(async () => {
-    if (!userStore.isAuthenticated) {
-      router.push('/login')
-    }
+  await userStore.fetchUserInfo()
+  if (!userStore.isAuthenticated) {
+    router.push('/login')
+  }
 })
 
 async function handleLogout() {
   await userStore.logout()
   router.push('/login')
 }
-
 </script>
+
 
 <template>
   <v-container class="profile-container" v-if="$route.path === '/profile'">
