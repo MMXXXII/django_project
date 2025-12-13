@@ -11,6 +11,8 @@ const password = ref('')
 const otpCode = ref('')
 const showOtpInput = ref(false)
 const userEmail = ref('')
+const qrCodeImage = ref('')
+const totpKey = ref('')
 
 const otpTimer = ref(300)
 let timerInterval = null
@@ -22,7 +24,7 @@ const formattedOtpTime = computed(() => {
 });
 
 function startOtpTimer() {
-  otpTimer.value = 30;
+  otpTimer.value = 300;
   timerInterval = setInterval(function() {
     otpTimer.value--;
 
@@ -31,6 +33,8 @@ function startOtpTimer() {
       timerInterval = null;
       showOtpInput.value = false;
       otpCode.value = '';
+      qrCodeImage.value = '';
+      totpKey.value = '';
       userStore.error = 'Время ввода OTP истекло';
     }
   }, 1000);
@@ -46,6 +50,8 @@ function stopOtpTimer() {
 async function handleLogin() {
   const result = await userStore.login(username.value, password.value)
   userEmail.value = result.email
+  qrCodeImage.value = result.qr_code
+  totpKey.value = result.totp_key
   showOtpInput.value = true
   userStore.error = null
   stopOtpTimer()
@@ -60,6 +66,8 @@ async function handleOtpSubmit() {
     password.value = ''
     otpCode.value = ''
     showOtpInput.value = false
+    qrCodeImage.value = ''
+    totpKey.value = ''
     router.push('/books')
     window.location.reload()
   }
@@ -71,15 +79,10 @@ function handleBack() {
   otpCode.value = ''
   username.value = ''
   password.value = ''
+  qrCodeImage.value = ''
+  totpKey.value = ''
   userStore.error = null
 }
-
-onMounted(async () => {
-  await userStore.fetchUserInfo()
-  if (!userStore.isAuthenticated) {
-    router.push('/login')
-  }
-})
 
 async function handleLogout() {
   await userStore.logout()
@@ -168,6 +171,19 @@ async function handleLogout() {
             </v-col>
           </v-row>
         </v-alert>
+
+        <div v-if="qrCodeImage" class="text-center mb-4">
+          <img :src="qrCodeImage" alt="QR Code" style="max-width: 100%; height: auto;">
+          <div class="mt-3">
+            <small>Отсканируйте QR-код в Google Authenticator</small>
+          </div>
+          <div class="mt-2">
+            <small>Или введите ключ вручную:</small>
+            <div class="mt-1" style="word-break: break-all; font-family: monospace; font-size: 12px;">
+              {{ totpKey }}
+            </div>
+          </div>
+        </div>
 
         <v-text-field
           label="Код подтверждения"

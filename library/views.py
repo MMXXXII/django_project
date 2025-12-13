@@ -11,12 +11,13 @@ from rest_framework.permissions import BasePermission
 from library.models import Library
 from rest_framework import serializers, status
 from django.contrib.auth import logout as django_logout
-import random
-import string
 from library.models import UserProfile, Library
+import pyotp
+import qrcode
+import io
+import base64
 
 
-# Create your views here.
 class ShowLibraryView(TemplateView):
     template_name = "library/show_library.html"
 
@@ -84,19 +85,41 @@ class UserProfileViewSet(GenericViewSet):
             password=serializer.validated_data['password']
         )
         if user:
-            otp_code = ''.join(random.choices(string.digits, k=6))
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            
+            if not profile.totp_key:
+                profile.totp_key = pyotp.random_base32()
+                profile.save()
+            
+            totp = pyotp.TOTP(profile.totp_key)
+            provisioning_uri = totp.provisioning_uri(
+                name=user.username,
+                issuer_name='Library System'
+            )
+            
+            qr = qrcode.QRCode(version=1, box_size=10, border=5)
+            qr.add_data(provisioning_uri)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            buffer.seek(0)
+            qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+            
             cache.set(f'otp_pending_{user.username}', {
-                'otp_code': otp_code,
-                'timestamp': time.time(),
-                'password': serializer.validated_data['password']
+                'password': serializer.validated_data['password'],
+                'timestamp': time.time()
             }, 300)
-            print(f'OTP код для {user.username}: {otp_code}')
+            
             return Response({
                 'is_authenticated': False,
                 'username': user.username,
                 'email': user.email,
                 'is_superuser': user.is_superuser,
-                'otp_sent': True
+                'otp_sent': True,
+                'qr_code': f'data:image/png;base64,{qr_base64}',
+                'totp_key': profile.totp_key
             })
         return Response({'is_authenticated': False, 'error': 'Неверные учетные данные'}, status=400)
 
@@ -106,20 +129,31 @@ class UserProfileViewSet(GenericViewSet):
         serializer.is_valid(raise_exception=True)
         username = serializer.validated_data['username']
         otp_code = serializer.validated_data['key']
+        
         pending_data = cache.get(f'otp_pending_{username}')
         if not pending_data:
             return Response({'success': False, 'error': 'OTP истек или не найден'}, status=400)
-        if pending_data['otp_code'] != otp_code:
-            return Response({'success': False, 'error': 'Неверный OTP код'}, status=400)
+        
         if time.time() - pending_data['timestamp'] > 300:
             cache.delete(f'otp_pending_{username}')
             return Response({'success': False, 'error': 'OTP истек'}, status=400)
+        
         user = authenticate(username=username, password=pending_data['password'])
-        if user:
-            login(request, user)
-            cache.delete(f'otp_pending_{username}')
-            return Response({'success': True, 'is_authenticated': True, 'is_superuser': user.is_superuser})
-        return Response({'success': False, 'error': 'Ошибка аутентификации'}, status=400)
+        if not user:
+            return Response({'success': False, 'error': 'Ошибка аутентификации'}, status=400)
+        
+        profile = UserProfile.objects.get(user=user)
+        totp = pyotp.TOTP(profile.totp_key)
+        
+        if not totp.verify(otp_code, valid_window=1):
+            return Response({'success': False, 'error': 'Неверный OTP код'}, status=400)
+        
+        login(request, user)
+        cache.delete(f'otp_pending_{username}')
+        cache.set(f'otp_good_{user.id}', True, 600)
+        cache.set(f'otp_timestamp_{user.id}', time.time(), 600)
+        
+        return Response({'success': True, 'is_authenticated': True, 'is_superuser': user.is_superuser})
 
     @action(detail=False, url_path='otp-status', permission_classes=[IsAuthenticated])
     def get_otp_status(self, request):
